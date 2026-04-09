@@ -1,0 +1,363 @@
+:root {
+    /* Symmetrical, extremely soft easing */
+    --ease-calm: ease-in-out;
+    --ease-button-motion: cubic-bezier(0.4, 0, 0.2, 1);
+    
+    /* Drastically slowed down animation durations */
+    --dur-fast: 1200ms;
+    --dur-medium: 1500ms;
+    --dur-slow: 2500ms;
+    --dur-breathe: 4000ms;
+    --dur-button-hover: 400ms;
+    --dur-button-press: 200ms;
+    
+    --accent-500: #5b4af1;
+    --accent-450: #6757ee;
+    --accent-600: #4f3ee0;
+    --accent-ring: #3f31c8;
+    --text-strong: #111827;
+    --text-muted: #374151;
+    --btn-on-accent: #ffffff;
+    
+    /* Softer shadows for glass */
+    --shadow-soft: 0 8px 24px -8px rgba(17, 24, 39, 0.15);
+    --shadow-deep: 0 16px 40px -16px rgba(17, 24, 39, 0.1);
+}
+
+.zen-pond-root {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #e6ebe8;
+    animation: lightShift 180s infinite alternate ease-in-out; /* Ultra slow lighting shift */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    cursor: crosshair;
+    position: relative;
+}
+
+@keyframes lightShift {
+    0%   { background-color: #e8ede8; }
+    25%  { background-color: #e3e8e1; }
+    50%  { background-color: #eeeae4; }
+    75%  { background-color: #e6e3e8; }
+    100% { background-color: #e0e6ea; }
+}
+
+.zen-pond-root #texture {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0.25;
+    mix-blend-mode: multiply;
+    z-index: 10;
+}
+
+.zen-pond-root canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    touch-action: manipulation;
+}
+
+/* --- UI Overlay Styles --- */
+.zen-pond-root #ui-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--dur-slow) var(--ease-calm);
+}
+
+.zen-pond-root #ui-container.is-visible {
+    opacity: 1;
+}
+
+/* The main structural card */
+.zen-pond-root .card {
+    position: relative;
+    background: rgba(255, 255, 255, 0.45);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    border-radius: 20px;
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.3),
+        var(--shadow-soft),
+        var(--shadow-deep);
+    padding: clamp(2rem, 3.5vw, 2.75rem);
+    width: 90%;
+    max-width: 480px;
+    
+    /* Locking height and layout to prevent visual jerking between steps */
+    min-height: 350px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    
+    transition: opacity var(--dur-medium) var(--ease-calm);
+    opacity: 0;
+}
+
+.zen-pond-root .card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 100%);
+    opacity: 0.6;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.zen-pond-root .card.is-visible {
+    opacity: 1;
+}
+
+.zen-pond-root .card.is-exiting-final {
+    opacity: 0;
+}
+
+.zen-pond-root .card,
+.zen-pond-root .card * {
+    pointer-events: auto;
+}
+
+.zen-pond-root #card-content {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+/* The individually animating items inside the card */
+.zen-pond-root .reveal-item {
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-calm);
+    width: 100%;
+}
+
+.zen-pond-root .reveal-item.is-visible {
+    opacity: 1;
+}
+
+.zen-pond-root .reveal-item.is-exiting-item {
+    opacity: 0;
+}
+
+/* Card Typography */
+.zen-pond-root .card h2 {
+    margin: 0 0 16px 0;
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--text-strong);
+    line-height: 1.4;
+    letter-spacing: 0.01em;
+}
+
+.zen-pond-root .card p {
+    margin: 0 auto 28px auto;
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    line-height: 1.6;
+    max-width: 34ch;
+}
+
+/* Buttons */
+.zen-pond-root .btn {
+    background-color: var(--accent-500);
+    color: var(--btn-on-accent);
+    border: none;
+    border-radius: 12px;
+    padding: 14px 28px;
+    font-size: 1.05rem;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow:
+        0 0 0 0 rgba(63, 49, 200, 0),
+        0 4px 10px rgba(63, 49, 200, 0.2);
+    transition: opacity var(--dur-fast) var(--ease-calm),
+                background-color var(--dur-button-hover) var(--ease-button-motion),
+                color var(--dur-button-hover) var(--ease-button-motion),
+                transform var(--dur-button-press) var(--ease-button-motion),
+                border-color var(--dur-button-hover) var(--ease-button-motion),
+                box-shadow var(--dur-button-hover) var(--ease-button-motion);
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+}
+
+.zen-pond-root .btn:hover {
+    background-color: var(--accent-450);
+    box-shadow:
+        0 0 0 1px rgba(63, 49, 200, 0.08),
+        0 10px 22px rgba(63, 49, 200, 0.24);
+}
+
+.zen-pond-root .btn:active {
+    background-color: var(--accent-600);
+    transform: scale(0.985);
+    box-shadow:
+        0 0 0 1px rgba(63, 49, 200, 0.12),
+        0 6px 14px rgba(63, 49, 200, 0.2);
+}
+
+.zen-pond-root .btn-outline {
+    background-color: rgba(255, 255, 255, 0.35);
+    color: var(--text-strong);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    margin-bottom: 12px;
+    box-shadow:
+        0 2px 6px rgba(17, 24, 39, 0.05);
+}
+
+.zen-pond-root .btn-outline:hover {
+    background-color: rgba(255, 255, 255, 0.6);
+    border-color: #ffffff;
+    box-shadow: 0 6px 16px rgba(17, 24, 39, 0.08);
+}
+
+/* --- Breathing UI Elements --- */
+.zen-pond-root .breathing-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 220px;
+}
+
+.zen-pond-root .breathing-circle {
+    position: relative;
+    isolation: isolate;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: 2px solid rgba(91, 74, 241, 0.34);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.1rem;
+    font-weight: 300;
+    color: #5b4af1;
+    
+    --circle-scale: 1;
+    --circle-alpha: 0.14;
+    --circle-border-alpha: 0.34;
+    --glow-alpha: 0.16;
+    --ring-scale: 1.05;
+    --ring-alpha: 0;
+    
+    transform: scale(var(--circle-scale));
+    background: rgba(91, 74, 241, var(--circle-alpha));
+    border-color: rgba(91, 74, 241, var(--circle-border-alpha));
+    box-shadow:
+        0 0 0 1px rgba(91, 74, 241, 0.06),
+        0 0 0 10px rgba(91, 74, 241, calc(var(--glow-alpha) * 0.22)),
+        0 0 42px rgba(91, 74, 241, var(--glow-alpha));
+        
+    transition: transform var(--dur-breathe) var(--ease-calm),
+                background-color var(--dur-breathe) var(--ease-calm),
+                border-color var(--dur-breathe) var(--ease-calm),
+                box-shadow var(--dur-breathe) var(--ease-calm);
+}
+
+.zen-pond-root .breathing-circle::after {
+    content: "";
+    position: absolute;
+    inset: -16px;
+    border-radius: inherit;
+    border: 1px solid rgba(91, 74, 241, 0.45);
+    opacity: var(--ring-alpha);
+    transform: scale(var(--ring-scale));
+    transition: transform var(--dur-breathe) var(--ease-calm),
+                opacity var(--dur-breathe) var(--ease-calm);
+    pointer-events: none;
+    z-index: -1;
+}
+
+.zen-pond-root .breathing-circle.phase-inhale {
+    --circle-scale: 1.55;
+    --circle-alpha: 0.26;
+    --circle-border-alpha: 0.62;
+    --glow-alpha: 0.34;
+    --ring-scale: 1.34;
+    --ring-alpha: 0.46;
+}
+
+.zen-pond-root .breathing-circle.phase-hold {
+    --circle-scale: 1.55;
+    --circle-alpha: 0.24;
+    --circle-border-alpha: 0.58;
+    --glow-alpha: 0.3;
+    --ring-scale: 1.37;
+    --ring-alpha: 0.24;
+}
+
+.zen-pond-root .breathing-circle.phase-exhale {
+    --circle-scale: 1;
+    --circle-alpha: 0.12;
+    --circle-border-alpha: 0.32;
+    --glow-alpha: 0.1;
+    --ring-scale: 1.06;
+    --ring-alpha: 0.06;
+}
+
+.zen-pond-root .breathing-count {
+    display: inline-block;
+    opacity: 1;
+    transition: opacity 400ms ease-in-out;
+}
+
+.zen-pond-root .breathing-count.is-changing {
+    opacity: 0;
+}
+
+.zen-pond-root .breathing-label {
+    margin-top: 36px;
+    font-size: 1.08rem;
+    color: var(--text-strong);
+    font-weight: 500;
+    letter-spacing: 0.95px;
+    text-transform: uppercase;
+    min-height: 1.45em;
+    position: relative;
+    width: 100%;
+    display: grid;
+    place-items: center;
+}
+
+.zen-pond-root .breathing-label-text {
+    grid-area: 1 / 1;
+    opacity: 0;
+    transition: opacity 400ms ease-in-out;
+}
+
+.zen-pond-root .breathing-label-text.is-active {
+    opacity: 1;
+}
+
+@media (min-width: 1024px) {
+    .zen-pond-root .card {
+        max-width: 500px;
+    }
+}

@@ -1,0 +1,68 @@
+import { GoogleGenAI, Modality, ThinkingLevel } from "@google/genai";
+
+export const ai = new GoogleGenAI({ 
+  apiKey: process.env.GEMINI_API_KEY || '' 
+});
+
+export async function generateSpeech(text: string, voice: string = 'Kore') {
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: voice },
+          },
+        },
+      },
+    });
+
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    return base64Audio;
+  } catch (error) {
+    console.error("Gemini TTS Error:", error);
+    throw error;
+  }
+}
+
+export async function* streamChat(
+  messages: { role: 'user' | 'model', parts: { text: string }[] }[],
+  systemInstruction?: string,
+  model: string = "gemini-3-flash-preview",
+  thinkingLevel?: ThinkingLevel,
+  useGrounding: boolean = true
+) {
+  try {
+    const tools: any[] = [];
+    if (useGrounding) {
+      tools.push({ googleSearch: {} });
+    }
+
+    const stream = await ai.models.generateContentStream({
+      model: model,
+      contents: messages,
+      tools,
+      config: {
+        systemInstruction: systemInstruction || "You are Aura, a helpful and friendly AI assistant. Your responses should be clear, concise, and formatted using Markdown when appropriate. Maintain a professional yet approachable tone.",
+        thinkingConfig: { includeThoughts: true, thinkingLevel: thinkingLevel || undefined },
+        includeServerSideToolInvocations: useGrounding ? true : undefined,
+      } as any
+    } as any);
+
+    for await (const chunk of stream) {
+      const parts = chunk.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        if (part.thought) {
+          yield { type: 'thought', content: part.text || '' };
+        } else if (part.text) {
+          yield { type: 'text', content: part.text };
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Gemini API Error:", error);
+    throw error;
+  }
+}
