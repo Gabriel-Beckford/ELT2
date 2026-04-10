@@ -131,7 +131,8 @@ export const facilitatorPrompt = `<?xml version="1.0" encoding="UTF-8"?>
     Use the following unicode symbols consistently throughout the lesson to create visual structure:
     ✦  — stage headers and major transitions (e.g., "✦ Stage 3: Understanding Kolb's Cycle")
     ✧  — sub-steps and secondary markers (e.g., "✧ Your responses from earlier:")
-    Do NOT use any other star or bullet symbols. Keep formatting clean and consistent.
+    
+    For lists of items, ALWAYS use standard Markdown bullet points (e.g., "- Item") to ensure they are rendered correctly as a vertical list.
   </symbols>
   <headers>
     Begin each new stage with: ✦ **[Stage N: Stage Name]**
@@ -189,12 +190,12 @@ export const facilitatorPrompt = `<?xml version="1.0" encoding="UTF-8"?>
 
     <step id="1.3" name="Learning Outcomes">
       <action>
-        Present the lesson's intended learning outcomes:
-        ✧ Identify and describe the four phases of Kolb's experiential learning cycle.
-        ✧ Apply the cycle to a critical incident from your own teaching practice.
-        ✧ Understand the principles and conditions that support experiential learning.
-        ✧ Evaluate reflective writing using a structured rubric.
-        ✧ Identify connections between evaluated examples and your own reflective practice.
+        Present the lesson's intended learning outcomes as a bulleted list:
+        - Identify and describe the four phases of Kolb's experiential learning cycle.
+        - Apply the cycle to a critical incident from your own teaching practice.
+        - Understand the principles and conditions that support experiential learning.
+        - Evaluate reflective writing using a structured rubric.
+        - Identify connections between evaluated examples and your own reflective practice.
 
         Then ask: "Which of these outcomes are you most interested in exploring today? This will help me tailor the session to what matters most to you."
       </action>

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Mic, MicOff, Loader2 } from 'lucide-react';
+import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Mic, MicOff, Loader2, Cpu } from 'lucide-react';
 import { ThinkingLevel } from "@google/genai";
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
@@ -8,7 +8,9 @@ import { MemorySettings } from './MemorySettings';
 import { Message, Chat, UserProfile } from '@/src/types';
 import { streamChat } from '@/src/lib/gemini';
 import { cn } from '@/src/lib/utils';
+import { SoftRevealController } from '@/src/lib/reveal';
 import { SYSTEM_PROMPTS, PromptId } from '@/src/constants/prompts';
+import { LEARNING_FACILITATOR_REVIEWER, REFLECTIVE_WRITING_REVIEWER, SOLO_ASSESSMENT_AGENT } from '@/src/constants/reviewers';
 import { auth, db, logOut } from '@/src/lib/firebase';
 import { useLiveAudio } from '@/src/hooks/useLiveAudio';
 import { 
@@ -28,13 +30,9 @@ import {
 } from 'firebase/firestore';
 
 const SLIDER_POINTS = [
-  { id: 1, model: 'gemini-3.1-pro-preview', thinking: ThinkingLevel.HIGH, label: 'Deep Reasoning', speed: 'Slowest' },
-  { id: 2, model: 'gemini-3-flash-preview', thinking: ThinkingLevel.HIGH, label: 'High Reasoning', speed: 'Very Slow' },
-  { id: 3, model: 'gemini-3-flash-preview', thinking: ThinkingLevel.HIGH, label: 'Balanced', speed: 'Slow' },
-  { id: 4, model: 'gemini-3-flash-preview', thinking: ThinkingLevel.LOW, label: 'Fast Reasoning', speed: 'Medium' },
-  { id: 5, model: 'gemini-3-flash-preview', thinking: ThinkingLevel.LOW, label: 'Minimal Reasoning', speed: 'Fast' },
-  { id: 6, model: 'gemini-3.1-flash-lite-preview', thinking: ThinkingLevel.LOW, label: 'Lite Balanced', speed: 'Very Fast' },
-  { id: 7, model: 'gemini-3.1-flash-lite-preview', thinking: ThinkingLevel.LOW, label: 'Minimal Latency', speed: 'Fastest' },
+  { id: 1, level: ThinkingLevel.LOW, label: 'Minimal Effort', speed: 'Fastest' },
+  { id: 2, level: ThinkingLevel.MEDIUM, label: 'Balanced Effort', speed: 'Balanced' },
+  { id: 3, level: ThinkingLevel.HIGH, label: 'Deep Effort', speed: 'Slowest' },
 ];
 
 export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initialPromptId }) => {
@@ -50,6 +48,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
   const [settingsTab, setSettingsTab] = useState<'mode' | 'memory'>('mode');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const revealControllerRef = useRef<SoftRevealController | null>(null);
 
   // Live audio draft states
   const [liveUserText, setLiveUserText] = useState('');
@@ -63,6 +62,8 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     reviewThoughts: string;
     phase: 'drafting' | 'reviewing' | 'finalizing';
     model?: string;
+    modelSettings?: { label: string; speed: string; thinking: string };
+    sources?: { title: string; url: string }[];
   } | null>(null);
 
   const systemPrompt = SYSTEM_PROMPTS[selectedPromptId].content;
@@ -180,6 +181,13 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     });
   }, [activeChatId]);
 
+  // Cleanup reveal controller
+  useEffect(() => {
+    return () => {
+      revealControllerRef.current?.destroy();
+    };
+  }, []);
+
   const scrollToBottom = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -285,9 +293,54 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     await updateDoc(msgRef, { content, status });
   };
 
+    const parseReviewerOutput = (text: string) => {
+    const enhancedOutputMarker = /ENHANCED\s+OUTPUT/i;
+    const changeLogMarker = /CHANGE\s+LOG/i;
+    
+    const parts = text.split(enhancedOutputMarker);
+    if (parts.length < 2) return { content: text, reviewThoughts: '' };
+    
+    let preOutput = parts[0].trim();
+    // Remove trailing markdown headers or separators from preOutput
+    preOutput = preOutput.replace(/#+\s*$/g, '').trim();
+    
+    let mainOutput = parts[1].trim();
+    let postOutput = '';
+    
+    const changeLogParts = mainOutput.split(changeLogMarker);
+    if (changeLogParts.length >= 2) {
+      mainOutput = changeLogParts[0].trim();
+      postOutput = changeLogParts[1].trim();
+    }
+    
+    // Clean up markers and separators
+    mainOutput = mainOutput.replace(/^[:\-\s\n#]+/, '').trim();
+    
+    const reviewThoughts = [
+      preOutput,
+      postOutput ? `### CHANGE LOG\n${postOutput}` : ''
+    ].filter(Boolean).join('\n\n');
+    
+    return { content: mainOutput, reviewThoughts };
+  };
+
     const generateAIResponse = async (chatId: string, history: { role: 'user' | 'model', parts: { text: string }[] }[]) => {
     setIsLoading(true);
-    const currentPoint = SLIDER_POINTS.find(p => p.id === sliderValue) || SLIDER_POINTS[2];
+    
+    // Staged Thinking Logic
+    const getStagedThinking = (baseLevel: number, stage: number) => {
+      const levels = [ThinkingLevel.LOW, ThinkingLevel.MEDIUM, ThinkingLevel.HIGH];
+      const index = Math.max(0, baseLevel - 1 - (stage - 1));
+      return levels[index];
+    };
+
+    const currentPoint = SLIDER_POINTS.find(p => p.id === sliderValue) || SLIDER_POINTS[1];
+    const agent1Thinking = getStagedThinking(sliderValue, 1);
+    const agent2Thinking = getStagedThinking(sliderValue, 2);
+    const agent3Thinking = getStagedThinking(sliderValue, 3);
+
+    // Cleanup previous controller if any
+    revealControllerRef.current?.destroy();
     
     // Initialize streaming message with empty content for the final area
     setStreamingMessage({ 
@@ -296,84 +349,185 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       draftThoughts: '', 
       reviewThoughts: '', 
       phase: 'drafting',
-      model: currentPoint.model
+      model: 'gemini-3.1-pro-preview',
+      modelSettings: {
+        label: currentPoint.label,
+        speed: currentPoint.speed,
+        thinking: agent1Thinking
+      }
     });
     
     try {
       // PHASE 1: DRAFTING
+      console.log(`Starting Phase 1: Drafting with thinking ${agent1Thinking}...`);
       let draftContent = '';
       let draftThoughts = '';
-      const draftStream = streamChat(history, fullSystemInstruction, currentPoint.model, currentPoint.thinking, useGrounding);
+      let draftSources: { title: string; url: string }[] = [];
+      
+      const draftingInstruction = `
+        ${fullSystemInstruction}
+        
+        THINKING PROTOCOL (MANDATORY):
+        Before drafting your response, you must explicitly reason through the following:
+        1. SITUATIONAL ANALYSIS: What is the core pedagogical challenge the user is facing?
+        2. KOLB ALIGNMENT: Which phase of the cycle are we in, and what is the target learning style?
+        3. SCAFFOLDING STRATEGY: How can I guide them without giving the answer? What specific Socratic question will be most effective?
+        4. CONTEXTUAL GROUNDING: How do the specific Haitian environmental factors (if known) affect this moment?
+        
+        Only after this deep analysis should you produce the draft response.
+      `;
+
+      const draftStream = streamChat(history, draftingInstruction, 'gemini-3.1-pro-preview', agent1Thinking, useGrounding);
       for await (const chunk of draftStream) {
-        if (typeof chunk === 'string') {
-          draftContent += chunk;
-        } else if (chunk.type === 'thought') {
-          draftThoughts += chunk.content;
+        if (chunk.type === 'thought') {
+          draftThoughts += chunk.content as string;
         } else if (chunk.type === 'text') {
-          draftContent += chunk.content;
+          draftContent += chunk.content as string;
+        } else if (chunk.type === 'sources') {
+          draftSources = [...draftSources, ...(chunk.content as any[])];
         }
         // Update draftContent but keep main content empty during this phase
-        setStreamingMessage(prev => prev ? { ...prev, draftContent, draftThoughts } : null);
+        setStreamingMessage(prev => prev ? { ...prev, draftContent, draftThoughts, sources: draftSources } : null);
       }
-
-      // PHASE 2: REVIEWING (Agentic Step)
-      setStreamingMessage(prev => prev ? { ...prev, phase: 'reviewing' } : null);
-      
-      const reviewPrompt = `
-        You are a pedagogical supervisor. Review the following draft response from an AI assistant to a teacher.
-        The assistant is supposed to follow this system instruction:
-        
-        <system_instruction>
-        ${fullSystemInstruction}
-        </system_instruction>
-        
-        Draft Response:
-        "${draftContent}"
-        
-        Your task:
-        1. Check if the response strictly follows the pedagogical rules (Kolb's cycle, reflective practice, etc.).
-        2. If it's good, return it as is.
-        3. If it can be improved (e.g., more encouraging, better scaffolding, clearer questions), revise it.
-        4. Return ONLY the final revised text. Do not include any meta-commentary.
-      `;
+      console.log("Phase 1 Complete. Draft length:", draftContent.length);
 
       let revisedContent = '';
       let revisedThoughts = '';
-      
-      const reviewStream = streamChat(
-        [{ role: 'user', parts: [{ text: reviewPrompt }] }], 
-        "You are a strict pedagogical reviewer. Return only the revised text.", 
-        currentPoint.model, 
-        currentPoint.thinking, 
-        false 
-      );
 
-      for await (const chunk of reviewStream) {
-        if (typeof chunk === 'string') {
-          revisedContent += chunk;
-        } else if (chunk.type === 'thought') {
-          revisedThoughts += chunk.content;
-        } else if (chunk.type === 'text') {
-          revisedContent += chunk.content;
+      if (!draftContent) {
+        console.warn("Phase 1 returned no content. Skipping Phase 2.");
+        revisedContent = "I'm sorry, I couldn't generate a draft. Please try again.";
+      } else {
+        // PHASE 2: REVIEWING (Agentic Step)
+        console.log(`Starting Phase 2: Reviewing with thinking ${agent2Thinking}...`);
+        setStreamingMessage(prev => prev ? { ...prev, phase: 'reviewing' } : null);
+        
+        let reviewPrompt = '';
+        let reviewerInstruction = '';
+
+        if (selectedPromptId === 'facilitator') {
+          reviewPrompt = LEARNING_FACILITATOR_REVIEWER
+            .replace('Facilitator Compliance Document', 'Facilitator Compliance Document (provided below)')
+            .concat(`\n\nFACILITATOR COMPLIANCE DOCUMENT:\n${fullSystemInstruction}\n\nDRAFT RESPONSE TO REVIEW:\n"${draftContent}"`);
+          
+          reviewerInstruction = "You are a senior pedagogical supervisor. Follow the XML-based system prompt strictly. Perform Phase A (Assessment) and Phase B (Enhancement). Return the scorecard, verdict, enhanced output, and change log as specified.";
+        } else {
+          reviewPrompt = REFLECTIVE_WRITING_REVIEWER
+            .replace('Reflective Writing Prompt', 'Reflective Writing Prompt (provided below)')
+            .concat(`\n\nREFLECTIVE WRITING PROMPT (COMPLIANCE DOCUMENT):\n${fullSystemInstruction}\n\nDRAFT RESPONSE TO REVIEW:\n"${draftContent}"`);
+          
+          reviewerInstruction = "You are a pedagogical supervisor. Follow the XML-based system prompt strictly. Perform Phase 1 (Assess) and Phase 2 (Enhance). Return the assessment and enhanced output as specified.";
+        }
+
+        const reviewStream = streamChat(
+          [{ role: 'user', parts: [{ text: reviewPrompt }] }], 
+          reviewerInstruction, 
+          'gemini-3.1-pro-preview', 
+          agent2Thinking, 
+          false 
+        );
+
+        // Initialize reveal controller for the revised content
+        const revealPromise = new Promise<void>((resolve) => {
+          revealControllerRef.current = new SoftRevealController({
+            onUpdate: (visible) => {
+              setStreamingMessage(prev => prev ? { ...prev, content: visible } : null);
+            },
+            onComplete: () => resolve(),
+            pacing: {
+              wpm: 320,
+              pauseMultipliers: {
+                comma: 1.5,
+                sentence: 3,
+                paragraph: 6
+              }
+            }
+          });
+        });
+
+        let fullReviewText = '';
+        for await (const chunk of reviewStream) {
+          if (chunk.type === 'thought') {
+            revisedThoughts += chunk.content as string;
+            setStreamingMessage(prev => prev ? { ...prev, reviewThoughts: revisedThoughts } : null);
+          } else if (chunk.type === 'text') {
+            fullReviewText += chunk.content as string;
+          }
         }
         
-        // Now we populate the main content area with the revised text
+        const { content: finalContent, reviewThoughts: scorecard } = parseReviewerOutput(fullReviewText);
+        revisedContent = finalContent;
+        
+        // Update reviewThoughts with the scorecard/assessment
         setStreamingMessage(prev => prev ? { 
           ...prev, 
-          content: revisedContent,
-          reviewThoughts: revisedThoughts 
+          reviewThoughts: (prev.reviewThoughts ? prev.reviewThoughts + '\n\n' : '') + scorecard 
         } : null);
+        
+        // Start revealing the final content
+        revealControllerRef.current?.append(finalContent);
+        revealControllerRef.current?.finish();
+        
+        // Wait for the reveal to catch up
+        await revealPromise;
+        
+        if (!revisedContent) {
+          console.warn("Phase 2 returned empty content. Falling back to draft.");
+        }
+        console.log("Phase 2 Complete. Revised length:", revisedContent.length);
       }
 
-      // PHASE 3: SAVE FINALIZED RESPONSE
-      setStreamingMessage(prev => prev ? { ...prev, phase: 'finalizing', content: revisedContent || draftContent } : null);
+      // PHASE 3: SOLO ASSESSMENT (Hidden Formative Agent)
+      let soloAssessment = '';
+      if (selectedPromptId === 'facilitator') {
+        console.log(`Starting Phase 3: SOLO Assessment with thinking ${agent3Thinking}...`);
+        setStreamingMessage(prev => prev ? { ...prev, phase: 'finalizing' } : null);
+
+        const isLessonComplete = revisedContent.includes('Stage 6') || revisedContent.includes('Next Steps');
+        
+        const soloPrompt = `
+          ${SOLO_ASSESSMENT_AGENT}
+          
+          CURRENT LESSON STATE:
+          ${isLessonComplete ? 'SIGNAL: The lesson is complete. Generate the Final Formative Overview.' : 'SIGNAL: The lesson is ongoing. Record the assessment silently for the current task.'}
+          
+          LATEST FACILITATOR RESPONSE:
+          "${revisedContent || draftContent}"
+        `;
+
+        const soloStream = streamChat(
+          history,
+          soloPrompt,
+          'gemini-3-flash-preview',
+          agent3Thinking,
+          false
+        );
+
+        for await (const chunk of soloStream) {
+          if (chunk.type === 'text') {
+            soloAssessment += chunk.content as string;
+          }
+        }
+        console.log("Phase 3 Complete. SOLO Assessment length:", soloAssessment.length);
+      }
+
+      // PHASE 4: SAVE FINALIZED RESPONSE
+      console.log("Starting Phase 4: Finalizing...");
+      setStreamingMessage(prev => prev ? { ...prev, phase: 'finalizing', content: revisedContent || draftContent, soloAssessment } : null);
       
       const modelMsgData: any = {
         chatId,
         role: 'assistant',
         content: revisedContent || draftContent,
-        draftContent: draftContent, // Save the draft for history/debugging
-        model: currentPoint.model,
+        draftContent: draftContent,
+        soloAssessment,
+        model: 'gemini-3.1-pro-preview',
+        modelSettings: {
+          label: currentPoint.label,
+          speed: currentPoint.speed,
+          thinking: agent1Thinking
+        },
+        sources: draftSources,
         status: 'finalized',
         timestamp: Date.now(),
       };
@@ -388,6 +542,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     } finally {
       setIsLoading(false);
       setStreamingMessage(null);
+      revealControllerRef.current?.destroy();
     }
   };
 
@@ -585,10 +740,10 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
 
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-semibold text-slate-700">Model Performance</h3>
+                        <h3 className="text-sm font-semibold text-slate-700">Search Grounding</h3>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded">
-                            Grounding Enabled
+                            {useGrounding ? 'Enabled' : 'Disabled'}
                           </span>
                           <input 
                             type="checkbox" 
@@ -604,55 +759,43 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
                         </div>
                       </div>
                       
-                      <div className="px-2">
-                        <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">
-                          <span>Slow / Deep</span>
-                          <span>Fast / Lite</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="1"
-                          max="7"
-                          step="1"
-                          value={sliderValue}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value);
-                            setSliderValue(val);
-                            if (activeChatId) {
-                              updateDoc(doc(db, 'chats', activeChatId), { sliderValue: val });
-                            }
-                          }}
-                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                        />
-                        <div className="flex justify-between mt-6">
-                          {SLIDER_POINTS.map((point) => (
-                            <div 
-                              key={point.id}
-                              className={cn(
-                                "flex flex-col items-center gap-1 transition-all",
-                                sliderValue === point.id ? "opacity-100 scale-110" : "opacity-30 scale-90"
-                              )}
-                            >
-                              <div className={cn(
-                                "h-2 w-2 rounded-full",
-                                sliderValue === point.id ? "bg-indigo-600 ring-4 ring-indigo-100" : "bg-slate-400"
-                              )} />
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-4 p-4 rounded-xl bg-white border border-slate-200 shadow-sm">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-bold text-slate-900">
-                              {SLIDER_POINTS.find(p => p.id === sliderValue)?.label}
-                            </span>
-                            <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
-                              {SLIDER_POINTS.find(p => p.id === sliderValue)?.speed}
-                            </span>
+                      <div className="p-4 rounded-xl bg-indigo-50/50 border border-indigo-100">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <Cpu size={16} className="text-indigo-600" />
+                            <span className="text-sm font-semibold text-indigo-900">Thinking Effort</span>
                           </div>
-                          <p className="text-[10px] text-slate-500">
-                            Model: {SLIDER_POINTS.find(p => p.id === sliderValue)?.model}
-                          </p>
+                          <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider bg-indigo-100 px-2 py-0.5 rounded">
+                            {SLIDER_POINTS.find(p => p.id === sliderValue)?.label}
+                          </span>
                         </div>
+                        
+                        <div className="px-2">
+                          <input
+                            type="range"
+                            min="1"
+                            max="3"
+                            step="1"
+                            value={sliderValue}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value);
+                              setSliderValue(val);
+                              if (activeChatId) {
+                                updateDoc(doc(db, 'chats', activeChatId), { sliderValue: val });
+                              }
+                            }}
+                            className="w-full h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                          />
+                          <div className="flex justify-between mt-2">
+                            <span className="text-[10px] text-indigo-400 font-medium">Minimal</span>
+                            <span className="text-[10px] text-indigo-400 font-medium">Balanced</span>
+                            <span className="text-[10px] text-indigo-400 font-medium">Deep</span>
+                          </div>
+                        </div>
+
+                        <p className="mt-4 text-[10px] text-indigo-700/60 leading-relaxed italic">
+                          Staged Thinking: Agent 1 (Drafting) uses full effort, while subsequent agents use progressively less to optimize speed.
+                        </p>
                       </div>
                     </div>
 
@@ -783,6 +926,8 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
                       reviewThoughts: streamingMessage.reviewThoughts,
                       phase: streamingMessage.phase,
                       model: streamingMessage.model,
+                      modelSettings: streamingMessage.modelSettings,
+                      sources: streamingMessage.sources,
                       status: 'draft',
                       timestamp: Date.now()
                     }}

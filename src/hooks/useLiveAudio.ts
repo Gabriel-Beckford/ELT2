@@ -126,20 +126,34 @@ export function useLiveAudio(
 
   const startLive = useCallback(async () => {
     try {
+      console.log("Starting Live Audio setup...");
       setIsConnecting(true);
       setTranscript('');
 
       // 1. Setup Audio Contexts
+      console.log("Setting up AudioContexts...");
       audioContextRef.current = new AudioContext({ sampleRate: 16000 });
       playbackContextRef.current = new AudioContext({ sampleRate: 24000 });
+      
+      // Resume contexts (browsers often start them as suspended)
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
+      if (playbackContextRef.current.state === 'suspended') {
+        await playbackContextRef.current.resume();
+      }
+      
       nextPlayTimeRef.current = playbackContextRef.current.currentTime;
 
       // 2. Load AudioWorklet
+      console.log("Loading AudioWorklet...");
       const blob = new Blob([captureWorkletCode], { type: 'application/javascript' });
       const workletUrl = URL.createObjectURL(blob);
       await audioContextRef.current.audioWorklet.addModule(workletUrl);
+      URL.revokeObjectURL(workletUrl);
 
       // 3. Get Microphone
+      console.log("Requesting Microphone access...");
       streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
       sourceRef.current = audioContextRef.current.createMediaStreamSource(streamRef.current);
       
@@ -148,21 +162,24 @@ export function useLiveAudio(
       processorRef.current.connect(audioContextRef.current.destination);
 
       // 4. Connect to Gemini Live
+      console.log("Connecting to Live API with model: gemini-3.1-flash-live-preview");
+      
+      if (!ai.live || typeof ai.live.connect !== 'function') {
+        throw new Error("Live API not supported by this version of the SDK or incorrectly initialized.");
+      }
+
       const sessionPromise = ai.live.connect({
-        model: "gemini-3-flash-live-preview",
+        model: "gemini-3.1-flash-live-preview",
         config: {
           responseModalities: [Modality.AUDIO],
-          tools: [{ googleSearch: {} }] as any,
-          includeServerSideToolInvocations: true,
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } },
           },
           systemInstruction: systemInstruction,
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
         } as any,
         callbacks: {
           onopen: () => {
+            console.log("Live API Connection Opened");
             setIsConnecting(false);
             setIsLive(true);
             
@@ -174,11 +191,12 @@ export function useLiveAudio(
                   session.sendRealtimeInput({
                     audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
                   });
-                });
+                }).catch(err => console.error("Failed to send audio:", err));
               };
             }
           },
           onmessage: (message: LiveServerMessage) => {
+            console.log("Live API Message:", message);
             // Handle audio output
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
@@ -211,6 +229,7 @@ export function useLiveAudio(
             }
           },
           onclose: () => {
+            console.log("Live API Connection Closed");
             stopAudio();
           },
           onerror: (error) => {

@@ -41,17 +41,40 @@ export async function* streamChat(
     }
 
     const stream = await ai.models.generateContentStream({
-      model: model,
+      model,
       contents: messages,
       tools,
       config: {
         systemInstruction: systemInstruction || "You are Aura, a helpful and friendly AI assistant. Your responses should be clear, concise, and formatted using Markdown when appropriate. Maintain a professional yet approachable tone.",
-        thinkingConfig: { includeThoughts: true, thinkingLevel: thinkingLevel || undefined },
+        thinkingConfig: thinkingLevel ? { includeThoughts: true, thinkingLevel } : undefined,
         includeServerSideToolInvocations: useGrounding ? true : undefined,
+        temperature: 1,
+        topP: 0.95,
+        maxOutputTokens: 65536,
       } as any
     } as any);
 
     for await (const chunk of stream) {
+      // Handle grounding metadata (search results)
+      const groundingMetadata = chunk.candidates?.[0]?.groundingMetadata;
+      if (groundingMetadata?.searchEntryPoint?.renderedContent) {
+        // This is the Google Search chip/entry point
+      }
+      
+      if (groundingMetadata?.groundingChunks) {
+        const sources = groundingMetadata.groundingChunks
+          .filter(c => c.web)
+          .map(c => ({
+            title: c.web?.title || 'Untitled Source',
+            url: c.web?.uri || ''
+          }))
+          .filter(s => s.url);
+        
+        if (sources.length > 0) {
+          yield { type: 'sources', content: sources };
+        }
+      }
+
       const parts = chunk.candidates?.[0]?.content?.parts || [];
       for (const part of parts) {
         if (part.thought) {

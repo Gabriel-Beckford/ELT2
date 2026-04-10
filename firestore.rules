@@ -74,7 +74,9 @@ service cloud.firestore {
              (!('reviewThoughts' in data) || (data.reviewThoughts is string && data.reviewThoughts.size() < 20000)) &&
              (!('draftContent' in data) || (data.draftContent is string && data.draftContent.size() < 10000)) &&
              (!('phase' in data) || (data.phase in ['drafting', 'reviewing', 'finalizing'])) &&
-             (!('model' in data) || (data.model is string && data.model.size() < 100));
+             (!('model' in data) || (data.model is string && data.model.size() < 100)) &&
+             (!('modelSettings' in data) || (data.modelSettings is map)) &&
+             (!('sources' in data) || (data.sources is list && data.sources.size() < 20));
     }
 
     // ===============================================================
