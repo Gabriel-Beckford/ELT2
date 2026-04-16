@@ -1,5 +1,5 @@
 import { scaffoldPrompt } from './scaffoldPrompt';
-import { facilitatorPrompt } from './facilitatorPrompt';
+import facilitatorPrompt from './facilitatorPrompt.xml?raw';
 
 export const SYSTEM_PROMPTS = {
   scaffold: {

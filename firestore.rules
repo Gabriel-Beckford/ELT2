@@ -79,6 +79,18 @@ service cloud.firestore {
              (!('sources' in data) || (data.sources is list && data.sources.size() < 20));
     }
 
+    function isValidProfile(data) {
+      let allowedFields = ['name', 'age', 'gender', 'uniqueLearningNeeds', 'qualifications', 'kolbLearningStyle', 'lastUpdatedAt'];
+      return data.keys().hasOnly(allowedFields) &&
+             (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
+             (!('age' in data) || (data.age is string && data.age.size() <= 10)) &&
+             (!('gender' in data) || (data.gender is string && data.gender.size() <= 50)) &&
+             (!('uniqueLearningNeeds' in data) || (data.uniqueLearningNeeds is string && data.uniqueLearningNeeds.size() <= 2000)) &&
+             (!('qualifications' in data) || (data.qualifications is string && data.qualifications.size() <= 2000)) &&
+             (!('kolbLearningStyle' in data) || (data.kolbLearningStyle is string && data.kolbLearningStyle.size() <= 100)) &&
+             (!('lastUpdatedAt' in data) || (data.lastUpdatedAt is number));
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -90,7 +102,8 @@ service cloud.firestore {
 
     match /profiles/{userId} {
       allow read: if isOwner(userId);
-      allow create, update: if isOwner(userId) && request.resource.data.keys().hasAny(['name', 'age', 'gender', 'uniqueLearningNeeds', 'preferredCommunicationStyle', 'qualifications', 'kolbLearningStyle']);
+      allow create, update: if isOwner(userId) && isValidProfile(request.resource.data);
+      allow delete: if isOwner(userId);
     }
 
     match /chats/{chatId} {

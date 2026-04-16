@@ -32,6 +32,7 @@ export interface UserProfile {
   uniqueLearningNeeds: string;
   qualifications: string;
   kolbLearningStyle: string;
+  lastUpdatedAt?: number;
 }
 
 export interface Chat {
