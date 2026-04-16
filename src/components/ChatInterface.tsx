@@ -8,6 +8,7 @@ import { MemorySettings } from './MemorySettings';
 import { Message, Chat, UserProfile } from '@/src/types';
 import { streamChat } from '@/src/lib/gemini';
 import { cn } from '@/src/lib/utils';
+import { appendChunk } from '@/src/lib/transcriptUtils';
 import { SoftRevealController } from '@/src/lib/reveal';
 import { SYSTEM_PROMPTS, PromptId } from '@/src/constants/prompts';
 import { LEARNING_FACILITATOR_REVIEWER } from '@/src/constants/reviewers';
@@ -86,11 +87,11 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
   }
   
   const handleUserTranscript = (text: string) => {
-    setLiveUserText(prev => prev + text);
+    setLiveUserText(prev => appendChunk(prev, text));
   };
 
   const handleModelTranscript = (text: string) => {
-    setLiveModelText(prev => prev + text);
+    setLiveModelText(prev => appendChunk(prev, text));
   };
 
   const handleTurnComplete = async () => {
@@ -136,6 +137,21 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     handleModelTranscript,
     handleTurnComplete
   );
+
+  const handleStartLive = () => {
+    let initialHistory: any[] = [];
+    if (activeChatId) {
+      // Build a lightweight history payload from current messages (finalized user/assistant turns only)
+      // Cap history size to the last 20 turns
+      const finalizedMessages = messages.filter(m => m.status === 'finalized');
+      const recentMessages = finalizedMessages.slice(-20);
+      initialHistory = recentMessages.map(msg => ({
+        role: msg.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: msg.content }]
+      }));
+    }
+    startLive(initialHistory);
+  };
 
   // Fetch user profile
   useEffect(() => {
@@ -536,7 +552,7 @@ ${draftContent}
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={isLive ? stopAudio : startLive}
+              onClick={isLive ? stopAudio : handleStartLive}
               disabled={isConnecting}
               className={cn(
                 "flex h-9 px-3 items-center gap-2 rounded-lg text-sm font-medium transition-all shadow-sm",

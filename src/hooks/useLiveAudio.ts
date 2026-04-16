@@ -124,7 +124,7 @@ export function useLiveAudio(
     nextPlayTimeRef.current += audioBuffer.duration;
   }, []);
 
-  const startLive = useCallback(async () => {
+  const startLive = useCallback(async (initialHistory?: any[]) => {
     try {
       console.log("Starting Live Audio setup...");
       setIsConnecting(true);
@@ -183,6 +183,22 @@ export function useLiveAudio(
             setIsConnecting(false);
             setIsLive(true);
             
+            // Send history if provided
+            if (initialHistory && initialHistory.length > 0) {
+              sessionPromise.then((session: any) => {
+                 try {
+                   console.log(`Sending ${initialHistory.length} turns of history to Live session.`);
+                   if (typeof session.sendClientContent === 'function') {
+                     session.sendClientContent({ turns: initialHistory });
+                   } else if (typeof session.send === 'function') {
+                     session.send({ clientContent: { turns: initialHistory } });
+                   }
+                 } catch (e) {
+                   console.error("Failed to send initial history:", e);
+                 }
+              });
+            }
+
             // Start sending audio
             if (processorRef.current) {
               processorRef.current.port.onmessage = (event) => {
