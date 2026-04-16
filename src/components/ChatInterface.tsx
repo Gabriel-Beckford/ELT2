@@ -10,7 +10,7 @@ import { streamChat } from '@/src/lib/gemini';
 import { cn } from '@/src/lib/utils';
 import { SoftRevealController } from '@/src/lib/reveal';
 import { SYSTEM_PROMPTS, PromptId } from '@/src/constants/prompts';
-import { LEARNING_FACILITATOR_REVIEWER, REFLECTIVE_WRITING_REVIEWER, SOLO_ASSESSMENT_AGENT } from '@/src/constants/reviewers';
+import { LEARNING_FACILITATOR_REVIEWER, SOLO_ASSESSMENT_AGENT } from '@/src/constants/reviewers';
 import { auth, db, logOut } from '@/src/lib/firebase';
 import { useLiveAudio } from '@/src/hooks/useLiveAudio';
 import { 
@@ -41,7 +41,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedPromptId, setSelectedPromptId] = useState<PromptId>(initialPromptId || 'scaffold');
+  const [selectedPromptId] = useState<PromptId>('facilitator');
   const [sliderValue, setSliderValue] = useState(3); // Default to Balanced
   const [useGrounding, setUseGrounding] = useState(true);
   const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false);
@@ -167,7 +167,6 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     }
     const activeChat = chats.find(c => c.id === activeChatId);
     if (activeChat) {
-      if (activeChat.selectedPromptId) setSelectedPromptId(activeChat.selectedPromptId as PromptId);
       if (activeChat.sliderValue) setSliderValue(activeChat.sliderValue);
       if (activeChat.useGrounding !== undefined) setUseGrounding(activeChat.useGrounding);
     }
@@ -402,22 +401,11 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
         console.log(`Starting Phase 2: Reviewing with thinking ${agent2Thinking}...`);
         setStreamingMessage(prev => prev ? { ...prev, phase: 'reviewing' } : null);
         
-        let reviewPrompt = '';
-        let reviewerInstruction = '';
-
-        if (selectedPromptId === 'facilitator') {
-          reviewPrompt = LEARNING_FACILITATOR_REVIEWER
-            .replace('Facilitator Compliance Document', 'Facilitator Compliance Document (provided below)')
-            .concat(`\n\nFACILITATOR COMPLIANCE DOCUMENT:\n${fullSystemInstruction}\n\nDRAFT RESPONSE TO REVIEW:\n"${draftContent}"`);
-          
-          reviewerInstruction = "You are a senior pedagogical supervisor. Follow the XML-based system prompt strictly. Perform Phase A (Assessment) and Phase B (Enhancement). Return the scorecard, verdict, enhanced output, and change log as specified.";
-        } else {
-          reviewPrompt = REFLECTIVE_WRITING_REVIEWER
-            .replace('Reflective Writing Prompt', 'Reflective Writing Prompt (provided below)')
-            .concat(`\n\nREFLECTIVE WRITING PROMPT (COMPLIANCE DOCUMENT):\n${fullSystemInstruction}\n\nDRAFT RESPONSE TO REVIEW:\n"${draftContent}"`);
-          
-          reviewerInstruction = "You are a pedagogical supervisor. Follow the XML-based system prompt strictly. Perform Phase 1 (Assess) and Phase 2 (Enhance). Return the assessment and enhanced output as specified.";
-        }
+        let reviewPrompt = LEARNING_FACILITATOR_REVIEWER
+          .replace('Facilitator Compliance Document', 'Facilitator Compliance Document (provided below)')
+          .concat(`\n\nFACILITATOR COMPLIANCE DOCUMENT:\n${fullSystemInstruction}\n\nDRAFT RESPONSE TO REVIEW:\n"${draftContent}"`);
+        
+        let reviewerInstruction = "You are a senior pedagogical supervisor. Follow the XML-based system prompt strictly. Perform Phase A (Assessment) and Phase B (Enhancement). Return the scorecard, verdict, enhanced output, and change log as specified.";
 
         const reviewStream = streamChat(
           [{ role: 'user', parts: [{ text: reviewPrompt }] }], 
@@ -700,51 +688,6 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
 
                 {settingsTab === 'mode' ? (
                   <>
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-700 mb-3">Select Mode</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {(Object.keys(SYSTEM_PROMPTS) as PromptId[]).map((id) => {
-                          const prompt = SYSTEM_PROMPTS[id];
-                          const isSelected = selectedPromptId === id;
-                          return (
-                            <button
-                              key={id}
-                              onClick={() => {
-                                setSelectedPromptId(id);
-                                if (activeChatId) {
-                                  updateDoc(doc(db, 'chats', activeChatId), { selectedPromptId: id });
-                                }
-                              }}
-                              className={cn(
-                                "flex flex-col text-left p-4 rounded-xl border transition-all",
-                                isSelected 
-                                  ? "bg-indigo-50 border-indigo-300 ring-1 ring-indigo-300" 
-                                  : "bg-white border-slate-200 hover:border-indigo-200 hover:bg-slate-50"
-                              )}
-                            >
-                              <div className="flex items-center gap-2 mb-2">
-                                <div className={cn(
-                                  "flex h-8 w-8 items-center justify-center rounded-lg",
-                                  isSelected ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500"
-                                )}>
-                                  {id === 'scaffold' ? <MessageSquare size={16} /> : <BookOpen size={16} />}
-                                </div>
-                                <span className={cn(
-                                  "font-semibold text-sm",
-                                  isSelected ? "text-indigo-900" : "text-slate-700"
-                                )}>
-                                  {prompt.name}
-                                </span>
-                              </div>
-                              <p className="text-xs text-slate-500 leading-relaxed">
-                                {prompt.description}
-                              </p>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold text-slate-700">Search Grounding</h3>
@@ -848,28 +791,21 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
                   className="mb-6 rounded-2xl bg-white p-6 shadow-xl border border-slate-100"
                 >
                   <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 mx-auto mb-4">
-                    {selectedPromptId === 'scaffold' ? <MessageSquare size={32} /> : <BookOpen size={32} />}
+                    <BookOpen size={32} />
                   </div>
                   <h2 className="text-2xl font-bold mb-2">{SYSTEM_PROMPTS[selectedPromptId].name}</h2>
                   <p className="text-slate-500 max-w-sm">
-                    {selectedPromptId === 'scaffold' 
-                      ? "I'm here to help you reflect on your teaching experiences using Kolb's cycle." 
-                      : "I'll guide you through a professional development module on reflective practice."}
+                    I'll guide you through a professional development module on reflective practice.
                   </p>
                 </motion.div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-md">
-                  {(selectedPromptId === 'scaffold' ? [
-                    "I had a difficult class today...",
-                    "A student was very disengaged...",
-                    "I tried a new activity that failed...",
-                    "Reflect on a successful lesson"
-                  ] : [
+                  {[
                     "I'm ready to start the lesson",
                     "What is Kolb's cycle?",
                     "How does reflection help my teaching?",
                     "Explain the learning styles"
-                  ]).map((suggestion, i) => (
+                  ].map((suggestion, i) => (
                     <button
                       key={i}
                       onClick={() => handleSend(suggestion)}

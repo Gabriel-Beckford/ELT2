@@ -45,7 +45,7 @@ export default function App() {
         />
       );
     }
-    return <ChatInterface initialPromptId={selectedPathway || 'scaffold'} />;
+    return <ChatInterface initialPromptId={selectedPathway || 'facilitator'} />;
   }
 
   return (

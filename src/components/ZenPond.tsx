@@ -45,16 +45,7 @@ export const ZenPond: React.FC<ZenPondProps> = ({ onComplete }) => {
     { type: 'text', title: "Zen Pond", text: "A space for reflection and calm.", btn: "Start" },
     { type: 'text', title: "Welcome to our Reflective Space.", text: "Take one calm breath before continuing.", btn: "Next" },
     { type: 'text', title: "Take a moment to enjoy the waters.", text: "Notice the gentle ripples and calm fish underneath.", btn: "Next" },
-    { type: 'text', title: "When you're ready, choose a learning pathway.", text: "Each journey is unique and set to your own pace.", btn: "Next" },
-    { type: 'text', title: "Each pathway will take 20 minutes.", text: "Ensure you are in a quiet and comfortable environment.", btn: "Next" },
-    {
-      type: "options",
-      title: "Select a pathway",
-      options: [
-        { label: "Experiential Learning Theory", id: "scaffold" },
-        { label: "Guided Reflection", id: "facilitator" }
-      ]
-    },
+    { type: 'text', title: "The upcoming reflection will take about 20 minutes.", text: "Ensure you are in a quiet and comfortable environment.", btn: "Next" },
     { type: 'text', title: "Before we begin...", text: "Let's take a moment to centre ourselves in the present moment.", btn: "Next" },
     { type: 'text', title: "How to follow the exercise", text: "Inhale slowly as the circle expands. Hold while it stays large. Exhale completely as it shrinks.", btn: "I understand" },
     { type: 'text', title: "Let's breathe together.", text: "Follow the rhythm of the circle.", btn: "Begin" },
@@ -118,7 +109,7 @@ export const ZenPond: React.FC<ZenPondProps> = ({ onComplete }) => {
     setTimeout(() => {
       setIsUiVisible(false);
       setTimeout(() => {
-        onComplete(selectedPathway || 'scaffold');
+        onComplete(selectedPathway || 'facilitator');
       }, 500);
     }, 500);
   };
@@ -510,22 +501,6 @@ export const ZenPond: React.FC<ZenPondProps> = ({ onComplete }) => {
           id="card-container"
         >
           <div id="card-content">
-            {step.type === 'options' && step.options && (
-              <>
-                <h2 className={getRevealClass(0)} style={getRevealStyle(0)}>{step.title}</h2>
-                {step.options.map((opt: any, idx: number) => (
-                  <button 
-                    key={opt.id}
-                    className={`btn btn-outline ${getRevealClass(idx + 1)}`} 
-                    style={getRevealStyle(idx + 1)}
-                    onClick={() => nextStep(opt.id)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </>
-            )}
-
             {step.type === 'breathe' && (
               <div className="breathing-container">
                 <div 

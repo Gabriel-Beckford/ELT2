@@ -1,13 +1,6 @@
-import { scaffoldPrompt } from './scaffoldPrompt';
 import facilitatorPrompt from './facilitatorPrompt.xml?raw';
 
 export const SYSTEM_PROMPTS = {
-  scaffold: {
-    id: 'scaffold',
-    name: 'Reflective Practice Scaffold',
-    description: 'A reflective-practice scaffold for experienced online ELT teachers working with Haitian learners.',
-    content: scaffoldPrompt
-  },
   facilitator: {
     id: 'facilitator',
     name: 'Lesson Facilitator',
@@ -16,5 +9,5 @@ export const SYSTEM_PROMPTS = {
   }
 };
 
-export type PromptId = keyof typeof SYSTEM_PROMPTS;
+export type PromptId = 'facilitator';
 
