@@ -363,9 +363,15 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
         console.log(`Starting Phase 2: Reviewing with thinking ${agent2Thinking}...`);
         setStreamingMessage(prev => prev ? { ...prev, phase: 'reviewing' } : null);
         
-        let reviewPrompt = LEARNING_FACILITATOR_REVIEWER
-          .replace('FACILITATOR_COMPLIANCE_DOCUMENT', fullSystemInstruction)
-          .replace('DRAFT_RESPONSE_TO_REVIEW', draftContent);
+        let reviewPrompt = `${LEARNING_FACILITATOR_REVIEWER}
+
+<learning_facilitator_system_prompt>
+${fullSystemInstruction}
+</learning_facilitator_system_prompt>
+
+<draft_response_to_review>
+${draftContent}
+</draft_response_to_review>`;
         
         let reviewerInstruction = "You are a senior pedagogical supervisor. Validate the draft against the system prompt provided. Output ONLY the final, checked, learner-facing response and nothing else.";
 
