@@ -12,7 +12,6 @@ export interface Message {
   thoughts?: string;
   draftThoughts?: string;
   reviewThoughts?: string;
-  soloAssessment?: string;
   phase?: 'drafting' | 'reviewing' | 'finalizing';
   model?: string;
   modelSettings?: {

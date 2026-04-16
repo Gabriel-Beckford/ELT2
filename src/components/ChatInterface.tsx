@@ -10,7 +10,7 @@ import { streamChat } from '@/src/lib/gemini';
 import { cn } from '@/src/lib/utils';
 import { SoftRevealController } from '@/src/lib/reveal';
 import { SYSTEM_PROMPTS, PromptId } from '@/src/constants/prompts';
-import { LEARNING_FACILITATOR_REVIEWER, SOLO_ASSESSMENT_AGENT } from '@/src/constants/reviewers';
+import { LEARNING_FACILITATOR_REVIEWER } from '@/src/constants/reviewers';
 import { auth, db, logOut } from '@/src/lib/firebase';
 import { useLiveAudio } from '@/src/hooks/useLiveAudio';
 import { 
@@ -68,19 +68,22 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
 
   const systemPrompt = SYSTEM_PROMPTS[selectedPromptId].content;
   
-  const fullSystemInstruction = userProfile ? `
-    ${systemPrompt}
+  let fullSystemInstruction = systemPrompt;
+  if (userProfile) {
+    const profileXml = `<user_profile>
+    <name>${userProfile.name}</name>
+    <age>${userProfile.age}</age>
+    <gender>${userProfile.gender}</gender>
+    <qualifications>${userProfile.qualifications}</qualifications>
+    <klsi_style>${userProfile.kolbLearningStyle}</klsi_style>
+    <learning_needs>${userProfile.uniqueLearningNeeds || 'none'}</learning_needs>
+  </user_profile>`;
     
-    USER MEMORY (Reference this information about the user):
-    - Name: ${userProfile.name}
-    - Age: ${userProfile.age}
-    - Gender: ${userProfile.gender}
-    - Unique Learning Needs: ${userProfile.uniqueLearningNeeds}
-    - Qualifications: ${userProfile.qualifications}
-    - Kolb Learning Style: ${userProfile.kolbLearningStyle}
-    
-    Always tailor your pedagogical approach, tone, and examples to match the user's profile and learning style.
-  ` : systemPrompt;
+    fullSystemInstruction = systemPrompt.replace(
+      /<user_profile>[\s\S]*?<\/user_profile>/,
+      profileXml
+    );
+  }
   
   const handleUserTranscript = (text: string) => {
     setLiveUserText(prev => prev + text);
@@ -292,35 +295,8 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     await updateDoc(msgRef, { content, status });
   };
 
-    const parseReviewerOutput = (text: string) => {
-    const enhancedOutputMarker = /ENHANCED\s+OUTPUT/i;
-    const changeLogMarker = /CHANGE\s+LOG/i;
-    
-    const parts = text.split(enhancedOutputMarker);
-    if (parts.length < 2) return { content: text, reviewThoughts: '' };
-    
-    let preOutput = parts[0].trim();
-    // Remove trailing markdown headers or separators from preOutput
-    preOutput = preOutput.replace(/#+\s*$/g, '').trim();
-    
-    let mainOutput = parts[1].trim();
-    let postOutput = '';
-    
-    const changeLogParts = mainOutput.split(changeLogMarker);
-    if (changeLogParts.length >= 2) {
-      mainOutput = changeLogParts[0].trim();
-      postOutput = changeLogParts[1].trim();
-    }
-    
-    // Clean up markers and separators
-    mainOutput = mainOutput.replace(/^[:\-\s\n#]+/, '').trim();
-    
-    const reviewThoughts = [
-      preOutput,
-      postOutput ? `### CHANGE LOG\n${postOutput}` : ''
-    ].filter(Boolean).join('\n\n');
-    
-    return { content: mainOutput, reviewThoughts };
+  const parseReviewerOutput = (text: string) => {
+    return { content: text.trim(), reviewThoughts: '' };
   };
 
     const generateAIResponse = async (chatId: string, history: { role: 'user' | 'model', parts: { text: string }[] }[]) => {
@@ -336,7 +312,6 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     const currentPoint = SLIDER_POINTS.find(p => p.id === sliderValue) || SLIDER_POINTS[1];
     const agent1Thinking = getStagedThinking(sliderValue, 1);
     const agent2Thinking = getStagedThinking(sliderValue, 2);
-    const agent3Thinking = getStagedThinking(sliderValue, 3);
 
     // Cleanup previous controller if any
     revealControllerRef.current?.destroy();
@@ -363,20 +338,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       let draftThoughts = '';
       let draftSources: { title: string; url: string }[] = [];
       
-      const draftingInstruction = `
-        ${fullSystemInstruction}
-        
-        THINKING PROTOCOL (MANDATORY):
-        Before drafting your response, you must explicitly reason through the following:
-        1. SITUATIONAL ANALYSIS: What is the core pedagogical challenge the user is facing?
-        2. KOLB ALIGNMENT: Which phase of the cycle are we in, and what is the target learning style?
-        3. SCAFFOLDING STRATEGY: How can I guide them without giving the answer? What specific Socratic question will be most effective?
-        4. CONTEXTUAL GROUNDING: How do the specific Haitian environmental factors (if known) affect this moment?
-        
-        Only after this deep analysis should you produce the draft response.
-      `;
-
-      const draftStream = streamChat(history, draftingInstruction, 'gemini-3.1-pro-preview', agent1Thinking, useGrounding);
+      const draftStream = streamChat(history, fullSystemInstruction, 'gemini-3.1-pro-preview', agent1Thinking, useGrounding);
       for await (const chunk of draftStream) {
         if (chunk.type === 'thought') {
           draftThoughts += chunk.content as string;
@@ -402,10 +364,10 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
         setStreamingMessage(prev => prev ? { ...prev, phase: 'reviewing' } : null);
         
         let reviewPrompt = LEARNING_FACILITATOR_REVIEWER
-          .replace('Facilitator Compliance Document', 'Facilitator Compliance Document (provided below)')
-          .concat(`\n\nFACILITATOR COMPLIANCE DOCUMENT:\n${fullSystemInstruction}\n\nDRAFT RESPONSE TO REVIEW:\n"${draftContent}"`);
+          .replace('FACILITATOR_COMPLIANCE_DOCUMENT', fullSystemInstruction)
+          .replace('DRAFT_RESPONSE_TO_REVIEW', draftContent);
         
-        let reviewerInstruction = "You are a senior pedagogical supervisor. Follow the XML-based system prompt strictly. Perform Phase A (Assessment) and Phase B (Enhancement). Return the scorecard, verdict, enhanced output, and change log as specified.";
+        let reviewerInstruction = "You are a senior pedagogical supervisor. Validate the draft against the system prompt provided. Output ONLY the final, checked, learner-facing response and nothing else.";
 
         const reviewStream = streamChat(
           [{ role: 'user', parts: [{ text: reviewPrompt }] }], 
@@ -465,50 +427,15 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
         console.log("Phase 2 Complete. Revised length:", revisedContent.length);
       }
 
-      // PHASE 3: SOLO ASSESSMENT (Hidden Formative Agent)
-      let soloAssessment = '';
-      if (selectedPromptId === 'facilitator') {
-        console.log(`Starting Phase 3: SOLO Assessment with thinking ${agent3Thinking}...`);
-        setStreamingMessage(prev => prev ? { ...prev, phase: 'finalizing' } : null);
-
-        const isLessonComplete = revisedContent.includes('Stage 6') || revisedContent.includes('Next Steps');
-        
-        const soloPrompt = `
-          ${SOLO_ASSESSMENT_AGENT}
-          
-          CURRENT LESSON STATE:
-          ${isLessonComplete ? 'SIGNAL: The lesson is complete. Generate the Final Formative Overview.' : 'SIGNAL: The lesson is ongoing. Record the assessment silently for the current task.'}
-          
-          LATEST FACILITATOR RESPONSE:
-          "${revisedContent || draftContent}"
-        `;
-
-        const soloStream = streamChat(
-          history,
-          soloPrompt,
-          'gemini-3-flash-preview',
-          agent3Thinking,
-          false
-        );
-
-        for await (const chunk of soloStream) {
-          if (chunk.type === 'text') {
-            soloAssessment += chunk.content as string;
-          }
-        }
-        console.log("Phase 3 Complete. SOLO Assessment length:", soloAssessment.length);
-      }
-
-      // PHASE 4: SAVE FINALIZED RESPONSE
-      console.log("Starting Phase 4: Finalizing...");
-      setStreamingMessage(prev => prev ? { ...prev, phase: 'finalizing', content: revisedContent || draftContent, soloAssessment } : null);
+      // PHASE 3: SAVE FINALIZED RESPONSE
+      console.log("Starting Phase 3: Finalizing...");
+      setStreamingMessage(prev => prev ? { ...prev, phase: 'finalizing', content: revisedContent || draftContent } : null);
       
       const modelMsgData: any = {
         chatId,
         role: 'assistant',
         content: revisedContent || draftContent,
         draftContent: draftContent,
-        soloAssessment,
         model: 'gemini-3.1-pro-preview',
         modelSettings: {
           label: currentPoint.label,

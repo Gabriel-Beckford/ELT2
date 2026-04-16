@@ -220,18 +220,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onR
               </div>
             )}
             <ReactMarkdown>{message.content}</ReactMarkdown>
-
-            {message.soloAssessment && message.soloAssessment.includes('**SOLO Formative Overview**') && (
-              <div className="mt-6 p-6 rounded-xl bg-indigo-50 border border-indigo-100 shadow-sm">
-                <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm mb-4">
-                  <Sparkles size={18} />
-                  <span>SOLO Formative Assessment</span>
-                </div>
-                <div className="prose prose-indigo prose-sm max-w-none text-slate-700">
-                  <ReactMarkdown>{message.soloAssessment}</ReactMarkdown>
-                </div>
-              </div>
-            )}
             
             {message.sources && message.sources.length > 0 && (
               <div className="mt-4 pt-4 border-t border-slate-100">
