@@ -76,6 +76,7 @@ service cloud.firestore {
              (!('phase' in data) || (data.phase in ['drafting', 'reviewing', 'finalizing'])) &&
              (!('model' in data) || (data.model is string && data.model.size() < 100)) &&
              (!('modelSettings' in data) || (data.modelSettings is map)) &&
+             (!('soloAssessment' in data) || (data.soloAssessment is string && data.soloAssessment.size() < 30000)) &&
              (!('sources' in data) || (data.sources is list && data.sources.size() < 20));
     }
 

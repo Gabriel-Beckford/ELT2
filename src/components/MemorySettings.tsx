@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile } from '@/src/types';
 import { db, auth } from '@/src/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { Save, Loader2, Brain, Trash2, X, AlertCircle, Info } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -93,16 +93,15 @@ export const MemorySettings: React.FC = () => {
     if (!user) return;
     setIsDeleting(true);
     try {
-      const emptyProfile: UserProfile = {
-        name: '',
+      await deleteDoc(doc(db, 'profiles', user.uid));
+      setProfile({
+        name: user.displayName || '',
         age: '',
         gender: '',
         uniqueLearningNeeds: '',
         qualifications: '',
         kolbLearningStyle: 'Unknown / Not Set'
-      };
-      await setDoc(doc(db, 'profiles', user.uid), emptyProfile);
-      setProfile(emptyProfile);
+      });
       setSaveSuccess(true);
       setShowDeleteConfirm(false);
       setTimeout(() => setSaveSuccess(false), 3000);

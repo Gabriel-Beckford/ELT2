@@ -536,8 +536,15 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       if (revisedThoughts) modelMsgData.reviewThoughts = revisedThoughts;
 
       await addDoc(collection(db, 'chats', chatId, 'messages'), modelMsgData);
-
     } catch (error) {
+      const errMsg = `Error generating response: ${error instanceof Error ? error.message : String(error)}`;
+      await addDoc(collection(db, 'chats', chatId, 'messages'), {
+        chatId,
+        role: 'assistant',
+        content: errMsg,
+        status: 'finalized',
+        timestamp: Date.now(),
+      });
       console.error("Agentic workflow failed:", error);
     } finally {
       setIsLoading(false);

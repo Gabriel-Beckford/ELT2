@@ -48,9 +48,9 @@ export async function* streamChat(
         systemInstruction: systemInstruction || "You are Aura, a helpful and friendly AI assistant. Your responses should be clear, concise, and formatted using Markdown when appropriate. Maintain a professional yet approachable tone.",
         thinkingConfig: thinkingLevel ? { includeThoughts: true, thinkingLevel } : undefined,
         includeServerSideToolInvocations: useGrounding ? true : undefined,
-        temperature: 1,
+        temperature: 0.7,
         topP: 0.95,
-        maxOutputTokens: 65536,
+        maxOutputTokens: 8192,
       } as any
     } as any);
 
