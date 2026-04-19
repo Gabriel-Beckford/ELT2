@@ -11,9 +11,10 @@ interface ChatMessageProps {
   message: Message;
   onUpdate?: (content: string, status: 'draft' | 'finalized') => void;
   onRegenerate?: () => void;
+  selectedVoice?: string;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onRegenerate }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onRegenerate, selectedVoice = 'Kore' }) => {
   const isUser = message.role === 'user';
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -29,7 +30,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onR
     
     setIsSpeaking(true);
     try {
-      const base64Audio = await generateSpeech(message.content);
+      const base64Audio = await generateSpeech(message.content, selectedVoice);
       if (base64Audio) {
         await playAudioFromBase64(base64Audio);
       }
@@ -262,7 +263,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onR
                 <div className="flex items-center gap-3 text-indigo-500 italic text-sm">
                   <Loader2 size={16} className="animate-spin" />
                   <span className="font-medium tracking-tight">
-                    {message.phase === 'drafting' ? 'Aura is drafting a pedagogical response...' : 'Refining for reflective practice...'}
+                    {message.phase === 'drafting' ? 'Refleksyon is drafting a pedagogical response...' : 'Refining for reflective practice...'}
                   </span>
                 </div>
                 <div className="space-y-2">

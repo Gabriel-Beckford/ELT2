@@ -10,7 +10,7 @@ export const AuthScreen: React.FC = () => {
           <Sparkles size={40} />
         </div>
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Aura Chat</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Refleksyon Chat</h1>
           <p className="text-slate-500">Your intelligent reflective practice companion.</p>
         </div>
         <button

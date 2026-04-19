@@ -42,6 +42,9 @@ export interface Chat {
   model?: string;
   sliderValue?: number;
   useGrounding?: boolean;
+  selectedModel?: string;
+  selectedVoice?: string;
+  selectedTheme?: string;
   createdAt: number;
   updatedAt: number;
 }

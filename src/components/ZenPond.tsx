@@ -42,7 +42,7 @@ export const ZenPond: React.FC<ZenPondProps> = ({ onComplete }) => {
   };
 
   const flowSteps = [
-    { type: 'text', title: "Zen Pond", text: "A space for reflection and calm.", btn: "Start" },
+    { type: 'text', title: "Bassin Bleu", text: "A space for reflection and calm.", btn: "Start" },
     { type: 'text', title: "Welcome to our Reflective Space.", text: "Take one calm breath before continuing.", btn: "Next" },
     { type: 'text', title: "Take a moment to enjoy the waters.", text: "Notice the gentle ripples and calm fish underneath.", btn: "Next" },
     { type: 'text', title: "The upcoming reflection will take about 20 minutes.", text: "Ensure you are in a quiet and comfortable environment.", btn: "Next" },

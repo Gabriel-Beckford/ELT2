@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Mic, MicOff, Loader2, Cpu } from 'lucide-react';
+import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Mic, MicOff, Loader2, Cpu, Volume2, Palette } from 'lucide-react';
 import { ThinkingLevel } from "@google/genai";
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { MemorySettings } from './MemorySettings';
 import { Message, Chat, UserProfile } from '@/src/types';
-import { streamChat } from '@/src/lib/gemini';
+import { streamChat, generateImage } from '@/src/lib/gemini';
 import { cn } from '@/src/lib/utils';
 import { appendChunk } from '@/src/lib/transcriptUtils';
 import { SoftRevealController } from '@/src/lib/reveal';
@@ -36,6 +36,16 @@ const SLIDER_POINTS = [
   { id: 3, level: ThinkingLevel.HIGH, label: 'Deep Effort', speed: 'Slowest' },
 ];
 
+const AVAILABLE_MODELS = [
+  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', isPreview: true },
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3.0 Flash', isPreview: true },
+  { id: 'gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash Lite', isPreview: true },
+  { id: 'gemini-flash-latest', name: 'Gemini Flash', isPreview: false },
+];
+
+const AVAILABLE_VOICES = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Aoede'];
+const AVAILABLE_THEMES = ['indigo', 'rose', 'emerald', 'amber', 'sky'];
+
 export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initialPromptId }) => {
   const user = auth.currentUser;
   const [chats, setChats] = useState<Chat[]>([]);
@@ -47,6 +57,12 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
   const [useGrounding, setUseGrounding] = useState(true);
   const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'mode' | 'memory'>('mode');
+  const [selectedModel, setSelectedModel] = useState('gemini-3.1-pro-preview');
+  const [selectedVoice, setSelectedVoice] = useState('Kore');
+  const [selectedTheme, setSelectedTheme] = useState('indigo');
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const revealControllerRef = useRef<SoftRevealController | null>(null);
@@ -135,8 +151,17 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     fullSystemInstruction,
     handleUserTranscript,
     handleModelTranscript,
-    handleTurnComplete
+    handleTurnComplete,
+    selectedVoice
   );
+
+  const handleStopLive = async () => {
+    // Check for non-empty pending live text
+    if (liveUserText.trim() || liveModelText.trim()) {
+      await handleTurnComplete(); // This writes missing turns and clears state
+    }
+    stopAudio();
+  };
 
   const handleStartLive = () => {
     let initialHistory: any[] = [];
@@ -188,6 +213,9 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     if (activeChat) {
       if (activeChat.sliderValue) setSliderValue(activeChat.sliderValue);
       if (activeChat.useGrounding !== undefined) setUseGrounding(activeChat.useGrounding);
+      if (activeChat.selectedModel) setSelectedModel(activeChat.selectedModel);
+      if (activeChat.selectedVoice) setSelectedVoice(activeChat.selectedVoice);
+      if (activeChat.selectedTheme) setSelectedTheme(activeChat.selectedTheme);
     }
     const q = query(
       collection(db, 'chats', activeChatId, 'messages'),
@@ -224,6 +252,9 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       selectedPromptId,
       sliderValue,
       useGrounding,
+      selectedModel,
+      selectedVoice,
+      selectedTheme,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -260,6 +291,16 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
 
     // Trigger AI response in background
     const finalizedMessages = messages.filter(m => m.status === 'finalized');
+    
+    // Safety net: include any pending non-empty live text in history
+    const historyParts: any[] = [];
+    if (liveUserText.trim()) {
+      historyParts.push({ role: 'user' as const, parts: [{ text: liveUserText.trim() }] });
+    }
+    if (liveModelText.trim()) {
+      historyParts.push({ role: 'model' as const, parts: [{ text: liveModelText.trim() }] });
+    }
+
     const history = [
       ...finalizedMessages.map(msg => {
         const parts: any[] = [{ text: msg.content }];
@@ -269,7 +310,8 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
           role: msg.role === 'user' ? 'user' as const : 'model' as const,
           parts
         };
-      })
+      }),
+      ...historyParts
     ];
 
     const currentParts: any[] = [{ text: content || "Here is an image." }];
@@ -339,7 +381,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       draftThoughts: '', 
       reviewThoughts: '', 
       phase: 'drafting',
-      model: 'gemini-3.1-pro-preview',
+      model: selectedModel,
       modelSettings: {
         label: currentPoint.label,
         speed: currentPoint.speed,
@@ -353,8 +395,9 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       let draftContent = '';
       let draftThoughts = '';
       let draftSources: { title: string; url: string }[] = [];
+      let generatedImageUrl: string | undefined = undefined;
       
-      const draftStream = streamChat(history, fullSystemInstruction, 'gemini-3.1-pro-preview', agent1Thinking, useGrounding);
+      const draftStream = streamChat(history, fullSystemInstruction, selectedModel, agent1Thinking, useGrounding);
       for await (const chunk of draftStream) {
         if (chunk.type === 'thought') {
           draftThoughts += chunk.content as string;
@@ -394,7 +437,7 @@ ${draftContent}
         const reviewStream = streamChat(
           [{ role: 'user', parts: [{ text: reviewPrompt }] }], 
           reviewerInstruction, 
-          'gemini-3.1-pro-preview', 
+          selectedModel, 
           agent2Thinking, 
           false 
         );
@@ -427,7 +470,24 @@ ${draftContent}
           }
         }
         
-        const { content: finalContent, reviewThoughts: scorecard } = parseReviewerOutput(fullReviewText);
+        let { content: finalContent, reviewThoughts: scorecard } = parseReviewerOutput(fullReviewText);
+        
+        let extractedImagePrompt: string | undefined = undefined;
+        const quoteRegex = /Use this image-generation prompt exactly:\s*\"([\s\S]*?)\"/i;
+        const match = quoteRegex.exec(finalContent);
+        if (match) {
+          extractedImagePrompt = match[1].trim();
+          finalContent = finalContent.replace(match[0], '').trim();
+        } else {
+          // Fallback if not perfectly enclosed in quotes
+          const fallbackRegex = /Use this image-generation prompt exactly:\s*([\s\S]*?)(\n\s*Then|\n\s*$|$)/i;
+          const fb = fallbackRegex.exec(finalContent);
+          if (fb) {
+            extractedImagePrompt = fb[1].trim();
+            finalContent = finalContent.replace(fb[0], '').trim();
+          }
+        }
+
         revisedContent = finalContent;
         
         // Update reviewThoughts with the scorecard/assessment
@@ -447,18 +507,30 @@ ${draftContent}
           console.warn("Phase 2 returned empty content. Falling back to draft.");
         }
         console.log("Phase 2 Complete. Revised length:", revisedContent.length);
+
+        // Generate image if a prompt was extracted
+        if (extractedImagePrompt) {
+          console.log("Generating image with prompt:", extractedImagePrompt);
+          try {
+            // Update UI to show image generation is happening
+            setStreamingMessage(prev => prev ? { ...prev, phase: 'finalizing', content: revisedContent } : null);
+            generatedImageUrl = await generateImage(extractedImagePrompt);
+          } catch (e) {
+            console.error('Failed to generate image', e);
+          }
+        }
       }
 
       // PHASE 3: SAVE FINALIZED RESPONSE
       console.log("Starting Phase 3: Finalizing...");
-      setStreamingMessage(prev => prev ? { ...prev, phase: 'finalizing', content: revisedContent || draftContent } : null);
+      setStreamingMessage(prev => prev ? { ...prev, phase: 'finalizing', content: revisedContent || draftContent, imageUrl: generatedImageUrl } : null);
       
       const modelMsgData: any = {
         chatId,
         role: 'assistant',
         content: revisedContent || draftContent,
         draftContent: draftContent,
-        model: 'gemini-3.1-pro-preview',
+        model: selectedModel,
         modelSettings: {
           label: currentPoint.label,
           speed: currentPoint.speed,
@@ -468,6 +540,8 @@ ${draftContent}
         status: 'finalized',
         timestamp: Date.now(),
       };
+      
+      if (generatedImageUrl) modelMsgData.imageUrl = generatedImageUrl;
       
       if (draftThoughts) modelMsgData.draftThoughts = draftThoughts;
       if (revisedThoughts) modelMsgData.reviewThoughts = revisedThoughts;
@@ -499,7 +573,7 @@ ${draftContent}
   };
 
   return (
-    <div className="flex h-screen w-full bg-slate-50 font-sans text-slate-900 overflow-hidden">
+    <div className={cn("flex h-screen w-full bg-slate-50 font-sans text-slate-900 overflow-hidden", `theme-${selectedTheme}`)}>
       {/* Sidebar */}
       <aside className="hidden md:flex w-64 flex-col border-r border-slate-200 bg-white">
         <div className="p-4 border-b border-slate-100">
@@ -548,11 +622,11 @@ ${draftContent}
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
               <Sparkles size={18} />
             </div>
-            <h1 className="text-lg font-semibold tracking-tight">Aura Chat</h1>
+            <h1 className="text-lg font-semibold tracking-tight">Refleksyon Chat</h1>
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={isLive ? stopAudio : handleStartLive}
+              onClick={isLive ? handleStopLive : handleStartLive}
               disabled={isConnecting}
               className={cn(
                 "flex h-9 px-3 items-center gap-2 rounded-lg text-sm font-medium transition-all shadow-sm",
@@ -591,7 +665,7 @@ ${draftContent}
               title="System Settings"
             >
               <Settings size={18} />
-              <span className="hidden sm:inline">Switch Mode</span>
+              <span className="hidden sm:inline">Settings</span>
             </button>
             <button 
               onClick={clearChat}
@@ -638,6 +712,147 @@ ${draftContent}
                 {settingsTab === 'mode' ? (
                   <>
                     <div className="space-y-4">
+                      <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+                        <div className="flex items-center gap-2">
+                          <Bot size={16} className="text-slate-500" />
+                          <h3 className="text-sm font-semibold text-slate-700">Language Model</h3>
+                        </div>
+                        <div className="relative">
+                          <button
+                            onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium"
+                          >
+                            {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || selectedModel}
+                            <ChevronDown size={14} className={cn("text-slate-400 transition-transform", isModelMenuOpen && "rotate-180")} />
+                          </button>
+                          
+                          <AnimatePresence>
+                            {isModelMenuOpen && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -5 }}
+                                className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-20"
+                              >
+                                {AVAILABLE_MODELS.map(model => (
+                                  <button
+                                    key={model.id}
+                                    onClick={() => {
+                                      setSelectedModel(model.id);
+                                      setIsModelMenuOpen(false);
+                                      if (activeChatId) {
+                                        updateDoc(doc(db, 'chats', activeChatId), { selectedModel: model.id });
+                                      }
+                                    }}
+                                    className={cn(
+                                      "w-full flex items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors",
+                                      selectedModel === model.id ? "bg-indigo-50/50 text-indigo-700 font-semibold" : "text-slate-700"
+                                    )}
+                                  >
+                                    <span>{model.name}</span>
+                                    {model.isPreview && (
+                                      <span className="text-[9px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">Preview</span>
+                                    )}
+                                  </button>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+                        <div className="flex items-center gap-2">
+                          <Volume2 size={16} className="text-slate-500" />
+                          <h3 className="text-sm font-semibold text-slate-700">Voice Selection</h3>
+                        </div>
+                        <div className="relative">
+                          <button
+                            onClick={() => setIsVoiceMenuOpen(!isVoiceMenuOpen)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium"
+                          >
+                            {selectedVoice}
+                            <ChevronDown size={14} className={cn("text-slate-400 transition-transform", isVoiceMenuOpen && "rotate-180")} />
+                          </button>
+                          
+                          <AnimatePresence>
+                            {isVoiceMenuOpen && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -5 }}
+                                className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-20"
+                              >
+                                {AVAILABLE_VOICES.map(voice => (
+                                  <button
+                                    key={voice}
+                                    onClick={() => {
+                                      setSelectedVoice(voice);
+                                      setIsVoiceMenuOpen(false);
+                                      if (activeChatId) {
+                                        updateDoc(doc(db, 'chats', activeChatId), { selectedVoice: voice });
+                                      }
+                                    }}
+                                    className={cn(
+                                      "w-full flex items-center px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors",
+                                      selectedVoice === voice ? "bg-indigo-50/50 text-indigo-700 font-semibold" : "text-slate-700"
+                                    )}
+                                  >
+                                    {voice}
+                                  </button>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+                        <div className="flex items-center gap-2">
+                          <Palette size={16} className="text-slate-500" />
+                          <h3 className="text-sm font-semibold text-slate-700">App Color</h3>
+                        </div>
+                        <div className="relative">
+                          <button
+                            onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium capitalize"
+                          >
+                            {selectedTheme}
+                            <ChevronDown size={14} className={cn("text-slate-400 transition-transform", isThemeMenuOpen && "rotate-180")} />
+                          </button>
+                          
+                          <AnimatePresence>
+                            {isThemeMenuOpen && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -5 }}
+                                className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-20"
+                              >
+                                {AVAILABLE_THEMES.map(themeName => (
+                                  <button
+                                    key={themeName}
+                                    onClick={() => {
+                                      setSelectedTheme(themeName);
+                                      setIsThemeMenuOpen(false);
+                                      if (activeChatId) {
+                                        updateDoc(doc(db, 'chats', activeChatId), { selectedTheme: themeName });
+                                      }
+                                    }}
+                                    className={cn(
+                                      "w-full flex items-center px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors capitalize",
+                                      selectedTheme === themeName ? "bg-indigo-50/50 text-indigo-700 font-semibold" : "text-slate-700"
+                                    )}
+                                  >
+                                    {themeName}
+                                  </button>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold text-slate-700">Search Grounding</h3>
                         <div className="flex items-center gap-2">
@@ -724,7 +939,7 @@ ${draftContent}
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
                   <Mic size={20} className="animate-pulse" />
                 </div>
-                <h3 className="font-bold text-indigo-900">Aura Live</h3>
+                <h3 className="font-bold text-indigo-900">Refleksyon Live</h3>
               </div>
               <p className="text-sm text-slate-600 italic line-clamp-3">
                 {transcript || "Listening..."}
@@ -771,6 +986,7 @@ ${draftContent}
                   <ChatMessage 
                     key={message.id} 
                     message={message} 
+                    selectedVoice={selectedVoice}
                     onUpdate={(content, status) => handleUpdateMessage(message.id, content, status)}
                     onRegenerate={() => {
                       const finalizedMessages = messages.filter(m => m.status === 'finalized');
@@ -793,6 +1009,7 @@ ${draftContent}
                       status: 'finalized',
                       timestamp: Date.now()
                     }}
+                    selectedVoice={selectedVoice}
                   />
                 )}
                 {liveModelText && (
@@ -804,6 +1021,7 @@ ${draftContent}
                       status: 'finalized',
                       timestamp: Date.now()
                     }}
+                    selectedVoice={selectedVoice}
                   />
                 )}
 
@@ -823,6 +1041,7 @@ ${draftContent}
                       status: 'draft',
                       timestamp: Date.now()
                     }}
+                    selectedVoice={selectedVoice}
                   />
                 )}
 
@@ -850,12 +1069,12 @@ ${draftContent}
             <ChatInput onSend={handleSend} disabled={isLoading} />
             <p className="mt-2 text-center text-[10px] text-slate-400 uppercase tracking-widest">
               {streamingMessage?.phase === 'drafting' 
-                ? "Aura is drafting a response..." 
+                ? "Refleksyon is drafting a response..." 
                 : streamingMessage?.phase === 'reviewing'
-                ? "Aura is reviewing and refining the response..."
+                ? "Refleksyon is reviewing and refining the response..."
                 : streamingMessage?.phase === 'finalizing'
-                ? "Aura is finalizing the response..."
-                : "Aura may provide inaccurate information. Check important info."}
+                ? "Refleksyon is finalizing the response..."
+                : "Refleksyon may provide inaccurate information. Check important info."}
             </p>
           </div>
         </footer>

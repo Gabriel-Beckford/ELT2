@@ -132,7 +132,7 @@ export const MemorySettings: React.FC = () => {
         </div>
         <div>
           <h3 className="text-sm font-semibold text-slate-700">User Memory</h3>
-          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Information Aura will remember about you</p>
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Information Refleksyon will remember about you</p>
           {profile.lastUpdatedAt && (
             <p className="text-[10px] text-indigo-500 font-medium mt-0.5">
               Last updated {formatDistanceToNow(profile.lastUpdatedAt)} ago

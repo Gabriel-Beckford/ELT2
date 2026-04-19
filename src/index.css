@@ -5,7 +5,63 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
-@layer base {
+@layer base {  
+  .theme-rose {
+    --color-indigo-50: #fff1f2;
+    --color-indigo-100: #ffe4e6;
+    --color-indigo-200: #fecdd3;
+    --color-indigo-300: #fda4af;
+    --color-indigo-400: #fb7185;
+    --color-indigo-500: #f43f5e;
+    --color-indigo-600: #e11d48;
+    --color-indigo-700: #be123c;
+    --color-indigo-800: #9f1239;
+    --color-indigo-900: #881337;
+    --color-indigo-950: #4c0519;
+  }
+
+  .theme-emerald {
+    --color-indigo-50: #ecfdf5;
+    --color-indigo-100: #d1fae5;
+    --color-indigo-200: #a7f3d0;
+    --color-indigo-300: #6ee7b7;
+    --color-indigo-400: #34d399;
+    --color-indigo-500: #10b981;
+    --color-indigo-600: #059669;
+    --color-indigo-700: #047857;
+    --color-indigo-800: #065f46;
+    --color-indigo-900: #064e3b;
+    --color-indigo-950: #022c22;
+  }
+
+  .theme-amber {
+    --color-indigo-50: #fffbeb;
+    --color-indigo-100: #fef3c7;
+    --color-indigo-200: #fde68a;
+    --color-indigo-300: #fcd34d;
+    --color-indigo-400: #fbbf24;
+    --color-indigo-500: #f59e0b;
+    --color-indigo-600: #d97706;
+    --color-indigo-700: #b45309;
+    --color-indigo-800: #92400e;
+    --color-indigo-900: #78350f;
+    --color-indigo-950: #451a03;
+  }
+
+  .theme-sky {
+    --color-indigo-50: #f0f9ff;
+    --color-indigo-100: #e0f2fe;
+    --color-indigo-200: #bae6fd;
+    --color-indigo-300: #7dd3fc;
+    --color-indigo-400: #38bdf8;
+    --color-indigo-500: #0ea5e9;
+    --color-indigo-600: #0284c7;
+    --color-indigo-700: #0369a1;
+    --color-indigo-800: #075985;
+    --color-indigo-900: #0c4a6e;
+    --color-indigo-950: #082f49;
+  }
+
   body {
     @apply bg-slate-50 text-slate-900 antialiased;
   }

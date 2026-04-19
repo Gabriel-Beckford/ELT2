@@ -37,7 +37,8 @@ export function useLiveAudio(
   systemInstruction: string,
   onUserTranscriptChunk?: (text: string) => void,
   onModelTranscriptChunk?: (text: string) => void,
-  onTurnComplete?: () => void
+  onTurnComplete?: () => void,
+  selectedVoice: string = 'Kore'
 ) {
   const [isLive, setIsLive] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -168,18 +169,35 @@ export function useLiveAudio(
         throw new Error("Live API not supported by this version of the SDK or incorrectly initialized.");
       }
 
+      const liveSystemInstruction = systemInstruction.trim() + 
+        "\n\n[CRITICAL INSTRUCTION] You must understand and speak exclusively in English during this session. Do not generate or attempt to format speech in any other language.";
+
+      const liveConfig = {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } },
+          languageCode: "en-US",
+        },
+        inputAudioTranscription: {
+          languageCodes: ["en-US"],
+        },
+        outputAudioTranscription: {
+          languageCodes: ["en-US"],
+        },
+        systemInstruction: liveSystemInstruction,
+      };
+
       const sessionPromise = ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } },
-          },
-          systemInstruction: systemInstruction,
-        } as any,
+        config: liveConfig as any,
         callbacks: {
           onopen: () => {
             console.log("Live API Connection Opened");
+            console.log("Resolved Language Config:", {
+              speechLanguage: liveConfig.speechConfig.languageCode,
+              inputTranscription: liveConfig.inputAudioTranscription.languageCodes,
+              outputTranscription: liveConfig.outputAudioTranscription.languageCodes,
+            });
             setIsConnecting(false);
             setIsLive(true);
             

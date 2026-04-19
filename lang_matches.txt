@@ -1,0 +1,184 @@
+482-/** The audio transcription configuration in Setup. */
+483-export declare interface AudioTranscriptionConfig {
+484:    /** The language codes of the audio. BCP-47 language code. If not set, the transcription will be in the language detected by the model. If set, the server will use the language code specified in the model config as a hint for the language of the audio
+485-     */
+486:    languageCodes?: string[];
+487-}
+488-
+--
+770-     * @param {string | null | undefined} [opts.apiKey=process.env['GEMINI_API_KEY'] ?? null]
+771-     * @param {string | undefined} [opts.apiVersion=v1beta]
+772:     * @param {string} [opts.baseURL=process.env['GEMINI_NEXT_GEN_API_BASE_URL'] ?? https://generativelanguage.googleapis.com] - Override the default base URL for the API.
+773-     * @param {number} [opts.timeout=1 minute] - The maximum amount of time (in milliseconds) the client will wait for a response before timing out.
+774-     * @param {MergedRequestInit} [opts.fetchOptions] - Additional `RequestInit` options to be passed to `fetch` calls.
+--
+1169-    SAFETY = "SAFETY",
+1170-    /**
+1171:     * The prompt was blocked for other reasons. For example, it may be due to the prompt's language, or because it contains other harmful content.
+1172-     */
+1173-    OTHER = "OTHER",
+--
+1678-    code?: string;
+1679-    /**
+1680:     * Programming language of the `code`.
+1681-     */
+1682:    language?: 'python';
+1683-}
+1684-
+--
+2556-
+2557-/**
+2558: * Creates a `Part` object from the `code` and `language` of an `ExecutableCode` object.
+2559- */
+2560:export declare function createPartFromExecutableCode(code: string, language: Language): Part;
+2561-
+2562-/**
+--
+3166-     is filtered out of the response. */
+3167-    includeRaiReason?: boolean;
+3168:    /** Language of the text in the prompt. */
+3169:    language?: ImagePromptLanguage;
+3170-    /** MIME type of the generated image. */
+3171-    outputMimeType?: string;
+--
+3484-    /** Required. The code to be executed. */
+3485-    code?: string;
+3486:    /** Required. Programming language of the `code`. */
+3487:    language?: Language;
+3488-    /** Unique identifier of the `ExecutableCode` part. The server returns the `CodeExecutionResult` with the matching `id`. */
+3489-    id?: string;
+--
+3927-/**
+3928- * Represents the size and mimeType of a file. The information is used to
+3929: * request the upload URL from the https://generativelanguage.googleapis.com/upload/v1beta/files endpoint.
+3930- * This interface defines the structure for constructing and executing HTTP
+3931- * requests.
+--
+3994-    RECITATION = "RECITATION",
+3995-    /**
+3996:     * The token generation stopped because of using an unsupported language.
+3997-     */
+3998:    LANGUAGE = "LANGUAGE",
+3999-    /**
+4000-     * All other reasons that stopped the token generation.
+--
+4129-    MODE_UNSPECIFIED = "MODE_UNSPECIFIED",
+4130-    /**
+4131:     * Default model behavior, model decides to predict either function calls or natural language response.
+4132-     */
+4133-    AUTO = "AUTO",
+--
+4141-    NONE = "NONE",
+4142-    /**
+4143:     * Model is constrained to predict either function calls or natural language response. If "allowed_function_names" are set, the predicted function calls will be limited to any one of "allowed_function_names", else the predicted function calls will be any one of the provided "function_declarations".
+4144-     */
+4145-    VALIDATED = "VALIDATED"
+--
+4742-     is filtered out of the response. */
+4743-    includeRaiReason?: boolean;
+4744:    /** Language of the text in the prompt. */
+4745:    language?: ImagePromptLanguage;
+4746-    /** MIME type of the generated image. */
+4747-    outputMimeType?: string;
+--
+5633-    /** A link to show the review on Google Maps. */
+5634-    googleMapsUri?: string;
+5635:    /** A string of formatted recent time, expressing the review time relative to the current time in a form appropriate for the language and country. */
+5636-    relativePublishTimeDescription?: string;
+5637-    /** A reference representing this place review which may be used to look up this place review again. */
+--
+6081-}
+6082-
+6083:/** Enum that specifies the language of the text in the prompt. */
+6084:export declare enum ImagePromptLanguage {
+6085-    /**
+6086:     * Auto-detect the language.
+6087-     */
+6088-    auto = "auto",
+--
+6558-}
+6559-
+6560:/** Programming language of the `code`. */
+6561:export declare enum Language {
+6562-    /**
+6563:     * Unspecified language. This value should not be used.
+6564-     */
+6565:    LANGUAGE_UNSPECIFIED = "LANGUAGE_UNSPECIFIED",
+6566-    /**
+6567-     * Python >= 3.10, with numpy and simpy available.
+--
+6797-/**
+6798- Live class encapsulates the configuration for live interaction with the
+6799: Generative Language API. It embeds ApiClient for general API settings.
+6800-
+6801- @experimental
+--
+6975-     If included, server will compress context window to fit into given length. */
+6976-    contextWindowCompression?: ContextWindowCompressionConfig;
+6977:    /** The transcription of the input aligns with the input audio language.
+6978-     */
+6979-    inputAudioTranscription?: AudioTranscriptionConfig;
+6980:    /** The transcription of the output aligns with the language code
+6981-     specified for the output audio.
+6982-     */
+--
+7075-     If included the server will send SessionResumptionUpdate messages. */
+7076-    sessionResumption?: SessionResumptionConfig;
+7077:    /** The transcription of the input aligns with the input audio language.
+7078-     */
+7079-    inputAudioTranscription?: AudioTranscriptionConfig;
+7080:    /** The transcription of the output aligns with the language code
+7081-     specified for the output audio.
+7082-     */
+--
+9337-    /** Optional. The location of the user. */
+9338-    latLng?: LatLng;
+9339:    /** The language code of the user. */
+9340:    languageCode?: string;
+9341-}
+9342-
+--
+9860-    /** The configuration in case of single-voice output. */
+9861-    voiceConfig?: VoiceConfig;
+9862:    /** Optional. The language code (ISO 639-1) for the speech synthesis. */
+9863:    languageCode?: string;
+9864-    /** The configuration for a multi-speaker text-to-speech request. This field is mutually exclusive with `voice_config`. */
+9865-    multiSpeakerVoiceConfig?: MultiSpeakerVoiceConfig;
+--
+9871-declare interface SpeechConfig_2 {
+9872-    /**
+9873:     * The language of the speech.
+9874-     */
+9875:    language?: string;
+9876-    /**
+9877-     * The speaker's name, it should match the speaker name given in the prompt.
+--
+10114-    /** Use if you don't want to use the default replay id which is derived from the test name. */
+10115-    overrideReplayId?: string;
+10116:    /** True if the parameters contain an unsupported union type. This test  will be skipped for languages that do not support the union type. */
+10117-    hasUnion?: boolean;
+10118-    /** When set to a reason string, this test will be skipped in the API mode. Use this flag for tests that can not be reproduced with the real API. E.g. a test that deletes a resource. */
+--
+10960-        createUserContent,
+10961-        createModelContent,
+10962:        Language,
+10963-        Outcome,
+10964-        FunctionResponseScheduling,
+--
+11002-        EmbeddingApiType,
+11003-        SafetyFilterLevel,
+11004:        ImagePromptLanguage,
+11005-        MaskReferenceMode,
+11006-        ControlReferenceType,
+--
+11536-     * @param uploadUrl The upload URL as a string is where the file will be
+11537-     *     uploaded to. The uploadUrl must be a url that was returned by the
+11538:     * https://generativelanguage.googleapis.com/upload/v1beta/files endpoint
+11539-     * @param apiClient The ApiClient to use for uploading.
+11540-     * @return A Promise that resolves to types.File.
+--
+11547-     * @param uploadUrl The upload URL as a string is where the file will be
+11548-     *     uploaded to. The uploadUrl must be a url that was returned by the
+11549:     * https://generativelanguage.googleapis.com/upload/v1beta/{file_search_store_name}:uploadToFileSearchStore endpoint
+11550-     * @param apiClient The ApiClient to use for uploading.
+11551-     * @param httpOptions Optional HTTP options to merge.

@@ -4,6 +4,42 @@ export const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY || '' 
 });
 
+export async function generateImage(prompt: string): Promise<string | undefined> {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.1-flash-image-preview',
+      contents: {
+        parts: [
+          {
+            text: prompt,
+          },
+        ],
+      },
+      config: {
+        imageConfig: {
+          aspectRatio: "4:3",
+          imageSize: "1K"
+        }
+      } as any,
+    });
+    
+    if (response.candidates && response.candidates.length > 0) {
+      for (const part of response.candidates[0].content?.parts || []) {
+        if (part.inlineData) {
+          const base64EncodeString: string = part.inlineData.data;
+          // Format as complete data URI
+          if (part.inlineData.mimeType) {
+            return `data:${part.inlineData.mimeType};base64,${base64EncodeString}`;
+          }
+          return `data:image/png;base64,${base64EncodeString}`;
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Gemini Image Gen Error:", error);
+  }
+  return undefined;
+}
 export async function generateSpeech(text: string, voice: string = 'Kore') {
   try {
     const response = await ai.models.generateContent({

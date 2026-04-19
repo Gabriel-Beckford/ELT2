@@ -1,5 +1,5 @@
 {
-  "name": "Aura Chat",
-  "description": "A clean, modern AI chatbot powered by Gemini.",
+  "name": "Refleksyon",
+  "description": "An intelligent reflective practice companion powered by Gemini.",
   "requestFramePermissions": ["microphone"]
 }
