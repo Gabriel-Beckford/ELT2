@@ -37,20 +37,46 @@ export default function App() {
   if (user) {
     if (!hasCompletedIntro) {
       return (
-        <ZenPond 
-          onComplete={(pathway) => {
-            setSelectedPathway(pathway);
-            setHasCompletedIntro(true);
-          }} 
-        />
+        <>
+          <a 
+            href="#main-content" 
+            className="sr-only focus:not-sr-only fixed top-4 left-4 z-[999] bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg"
+          >
+            Skip to main content
+          </a>
+          <ZenPond 
+            onComplete={(pathway) => {
+              setSelectedPathway(pathway);
+              setHasCompletedIntro(true);
+            }} 
+          />
+        </>
       );
     }
-    return <ChatInterface initialPromptId={selectedPathway || 'facilitator'} />;
+    return (
+      <>
+        <a 
+          href="#main-content" 
+          className="sr-only focus:not-sr-only fixed top-4 left-4 z-[999] bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg"
+        >
+          Skip to main content
+        </a>
+        <ChatInterface initialPromptId={selectedPathway || 'facilitator'} />
+      </>
+    );
   }
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <AuthScreen />
+      <a 
+        href="#main-content" 
+        className="sr-only focus:not-sr-only fixed top-4 left-4 z-[999] bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg"
+      >
+        Skip to main content
+      </a>
+      <main id="main-content">
+        <AuthScreen />
+      </main>
     </div>
   );
 }

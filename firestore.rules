@@ -41,6 +41,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
@@ -53,42 +57,45 @@ service cloud.firestore {
       return data.keys().hasAll(['uid', 'email']) &&
              data.uid == request.auth.uid &&
              data.email is string &&
-             data.email.size() < 256;
+             data.email.size() < 256 &&
+             (!('createdAt' in data) || data.createdAt is number);
     }
 
     function isValidChat(data) {
       return data.keys().hasAll(['userId', 'title', 'selectedPromptId']) &&
              data.userId == request.auth.uid &&
-             data.title is string && data.title.size() < 100 &&
-             data.selectedPromptId is string;
+             data.title is string && data.title.size() <= 200 &&
+             data.selectedPromptId is string &&
+             (!('createdAt' in data) || data.createdAt is number) &&
+             (!('updatedAt' in data) || data.updatedAt is number);
     }
 
     function isValidMessage(data) {
       return data.keys().hasAll(['chatId', 'role', 'content', 'status', 'timestamp']) &&
              data.role in ['user', 'assistant'] &&
              data.status in ['draft', 'finalized'] &&
-             data.content is string && data.content.size() < 10000 &&
+             data.content is string && data.content.size() <= 100000 &&
              (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() < 2000)) &&
-             (!('thoughts' in data) || (data.thoughts is string && data.thoughts.size() < 20000)) &&
-             (!('draftThoughts' in data) || (data.draftThoughts is string && data.draftThoughts.size() < 20000)) &&
-             (!('reviewThoughts' in data) || (data.reviewThoughts is string && data.reviewThoughts.size() < 20000)) &&
-             (!('draftContent' in data) || (data.draftContent is string && data.draftContent.size() < 10000)) &&
+             (!('thoughts' in data) || (data.thoughts is string && data.thoughts.size() <= 200000)) &&
+             (!('draftThoughts' in data) || (data.draftThoughts is string && data.draftThoughts.size() <= 200000)) &&
+             (!('reviewThoughts' in data) || (data.reviewThoughts is string && data.reviewThoughts.size() <= 200000)) &&
+             (!('draftContent' in data) || (data.draftContent is string && data.draftContent.size() <= 100000)) &&
              (!('phase' in data) || (data.phase in ['drafting', 'reviewing', 'finalizing'])) &&
              (!('model' in data) || (data.model is string && data.model.size() < 100)) &&
              (!('modelSettings' in data) || (data.modelSettings is map)) &&
-             (!('soloAssessment' in data) || (data.soloAssessment is string && data.soloAssessment.size() < 30000)) &&
-             (!('sources' in data) || (data.sources is list && data.sources.size() < 20));
+             (!('soloAssessment' in data) || (data.soloAssessment is string && data.soloAssessment.size() <= 50000)) &&
+             (!('sources' in data) || (data.sources is list && data.sources.size() <= 50));
     }
 
     function isValidProfile(data) {
       let allowedFields = ['name', 'age', 'gender', 'uniqueLearningNeeds', 'qualifications', 'kolbLearningStyle', 'lastUpdatedAt'];
       return data.keys().hasOnly(allowedFields) &&
-             (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
-             (!('age' in data) || (data.age is string && data.age.size() <= 10)) &&
-             (!('gender' in data) || (data.gender is string && data.gender.size() <= 50)) &&
-             (!('uniqueLearningNeeds' in data) || (data.uniqueLearningNeeds is string && data.uniqueLearningNeeds.size() <= 2000)) &&
-             (!('qualifications' in data) || (data.qualifications is string && data.qualifications.size() <= 2000)) &&
-             (!('kolbLearningStyle' in data) || (data.kolbLearningStyle is string && data.kolbLearningStyle.size() <= 100)) &&
+             (!('name' in data) || (data.name is string && data.name.size() <= 200)) &&
+             (!('age' in data) || (data.age is string && data.age.size() <= 20)) &&
+             (!('gender' in data) || (data.gender is string && data.gender.size() <= 100)) &&
+             (!('uniqueLearningNeeds' in data) || (data.uniqueLearningNeeds is string && data.uniqueLearningNeeds.size() <= 10000)) &&
+             (!('qualifications' in data) || (data.qualifications is string && data.qualifications.size() <= 10000)) &&
+             (!('kolbLearningStyle' in data) || (data.kolbLearningStyle is string && data.kolbLearningStyle.size() <= 200)) &&
              (!('lastUpdatedAt' in data) || (data.lastUpdatedAt is number));
     }
 
@@ -109,13 +116,14 @@ service cloud.firestore {
 
     match /chats/{chatId} {
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated() && isValidChat(request.resource.data);
+      allow create: if isAuthenticated() && isValidChat(request.resource.data) && isValidId(chatId);
       allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidChat(request.resource.data);
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
 
       match /messages/{messageId} {
-        allow read: if isChatOwner(chatId);
-        allow create: if isChatOwner(chatId) && isValidMessage(request.resource.data);
+        allow get: if isChatOwner(chatId) && isValidId(messageId);
+        allow list: if isChatOwner(chatId);
+        allow create: if isChatOwner(chatId) && isValidMessage(request.resource.data) && isValidId(messageId);
         allow update: if isChatOwner(chatId) && isValidMessage(request.resource.data);
         allow delete: if isChatOwner(chatId);
       }

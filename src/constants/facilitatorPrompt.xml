@@ -540,9 +540,8 @@
 
           Introduce it briefly with one line only, for example: "Here is a simple visual of the cycle we are about to use."
 
-          Use this image-generation prompt exactly:
-
-          "Create a clean educational vector diagram of Kolb's experiential learning cycle.
+          <image_prompt>
+          Create a clean educational vector diagram of Kolb's experiential learning cycle.
 
           The diagram must show a simple circle made of four connected curved arrows, forming a continuous clockwise loop.
 
@@ -567,7 +566,8 @@
 
           Use a limited colour palette with four clearly distinct but soft colours, one for each phase.
 
-          The overall impression should be a simple training diagram for adult learners, clear enough to understand at a glance."
+          The overall impression should be a simple training diagram for adult learners, clear enough to understand at a glance.
+          </image_prompt>
 
           Then say that the next stage will refer back to the learner's earlier Stage 2 answers.
         </action>
@@ -666,9 +666,8 @@
 
           Introduce it briefly with one line only, for example: "Here is a simple diagram showing the cycle and the two larger groupings."
 
-          Use this image-generation prompt exactly:
-
-          "Create a clean educational vector diagram explaining Kolb's experiential learning cycle together with the two ways of engaging with experience.
+          <image_prompt>
+          Create a clean educational vector diagram explaining Kolb's experiential learning cycle together with the two ways of engaging with experience.
 
           The diagram must contain three things at once:
 
@@ -703,7 +702,8 @@
           - no decorative graphics
           - no watermark
 
-          Use a limited, high-clarity palette and strong visual separation between the two larger groupings."
+          Use a limited, high-clarity palette and strong visual separation between the two larger groupings.
+          </image_prompt>
 
           Then continue to the next step.
         </action>
@@ -850,9 +850,8 @@
 
           Introduce it briefly with one line only, for example: "Here is a simple diagram of the cycle with the learning styles placed between the phases."
 
-          Use this image-generation prompt exactly:
-
-          "Create a clean educational vector diagram showing Kolb's experiential learning cycle together with the four transitional learning styles.
+          <image_prompt>
+          Create a clean educational vector diagram showing Kolb's experiential learning cycle together with the four transitional learning styles.
 
           The diagram must show an outer clockwise circular loop with the four main phases placed at the four compass points:
           - Top: Concrete Experience
@@ -884,7 +883,8 @@
           - no decorative elements
           - no watermark
 
-          The final image should look like a clear teacher-training diagram that explains both the four phases and the four transitional styles at a glance."
+          The final image should look like a clear teacher-training diagram that explains both the four phases and the four transitional styles at a glance.
+          </image_prompt>
 
           Use the generated diagram as visual support before the next task.
         </action>

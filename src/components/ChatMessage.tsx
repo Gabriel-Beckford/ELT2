@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { User, Bot, Volume2, Loader2, Edit2, Check, X, RotateCcw, ChevronDown, ChevronRight, ExternalLink, Globe, Cpu, Sparkles } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { Message } from '@/src/types';
@@ -16,6 +16,7 @@ interface ChatMessageProps {
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onRegenerate, selectedVoice = 'Kore' }) => {
   const isUser = message.role === 'user';
+  const shouldReduceMotion = useReducedMotion();
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
@@ -53,7 +54,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onR
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
         "flex w-full gap-4 p-4 md:p-6 group relative",
@@ -81,7 +82,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onR
             </p>
           </div>
           
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all">
             {!isEditing && (
               <>
                 {!isUser && message.content && (
@@ -89,18 +90,20 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onR
                     onClick={handleSpeak}
                     disabled={isSpeaking}
                     className={cn(
-                      "flex h-7 w-7 items-center justify-center rounded-md transition-all",
+                      "flex h-7 w-7 items-center justify-center rounded-md transition-all outline-none focus:ring-2 focus:ring-indigo-500/50 focus:bg-slate-200 focus:text-slate-600",
                       isSpeaking ? "bg-indigo-100 text-indigo-600 opacity-100" : "text-slate-400 hover:bg-slate-200 hover:text-slate-600"
                     )}
                     title="Listen to message"
+                    aria-label="Listen to message"
                   >
                     {isSpeaking ? <Loader2 size={14} className="animate-spin" /> : <Volume2 size={14} />}
                   </button>
                 )}
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200 hover:text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/50 focus:bg-slate-200 focus:text-slate-600"
                   title="Edit message"
+                  aria-label="Edit message"
                 >
                   <Edit2 size={14} />
                 </button>
@@ -119,13 +122,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onR
             <div className="flex justify-end gap-2">
               <button
                 onClick={handleCancel}
-                className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 outline-none focus:ring-2 focus:ring-slate-300"
+                aria-label="Cancel edit"
               >
                 <X size={14} /> Cancel
               </button>
               <button
                 onClick={handleSave}
-                className="flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                className="flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
+                aria-label="Save message"
               >
                 <Check size={14} /> Save
               </button>
@@ -147,7 +152,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onR
               <div className="mb-4 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden">
                 <button 
                   onClick={() => setShowThoughts(!showThoughts)}
-                  className="w-full flex items-center justify-between p-3 text-xs font-semibold text-slate-700 hover:bg-slate-200/50 transition-colors"
+                  className="w-full flex items-center justify-between p-3 text-xs font-semibold text-slate-700 hover:bg-slate-200/50 transition-colors outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500/50 focus:bg-slate-200/50"
+                  aria-label={showThoughts ? "Hide thoughts" : "Show thoughts"}
+                  aria-pressed={showThoughts}
                 >
                   <div className="flex items-center gap-2">
                     <Bot size={14} /> 
@@ -240,6 +247,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onR
                         <img 
                           src={`https://www.google.com/s2/favicons?domain=${new URL(source.url).hostname}&sz=32`} 
                           alt="" 
+                          aria-hidden="true"
                           className="h-4 w-4"
                           referrerPolicy="no-referrer"
                         />

@@ -23,24 +23,6 @@ export const ZenPond: React.FC<ZenPondProps> = ({ onComplete }) => {
   const [isItemsVisible, setIsItemsVisible] = useState(false);
   const [isItemsExiting, setIsItemsExiting] = useState(false);
 
-  const motionConfig = {
-    ui: {
-      firstPaintDelayMs: 300,
-      contentFadeDurationMs: 1200,
-      itemRevealDurationMs: 1000,
-      itemStaggerMs: 0,
-      breatheIntroDelayMs: 1000,
-      cardExitDurationMs: 1000,
-      overlayFadeDurationMs: 1200
-    },
-    breathing: {
-      inhaleSeconds: 4,
-      holdSeconds: 7,
-      exhaleSeconds: 8,
-      tickMs: 1000 
-    }
-  };
-
   const flowSteps = [
     { type: 'text', title: "Bassin Bleu", text: "A space for reflection and calm.", btn: "Start" },
     { type: 'text', title: "Welcome to our Reflective Space.", text: "Take one calm breath before continuing.", btn: "Next" },
@@ -463,6 +445,26 @@ export const ZenPond: React.FC<ZenPondProps> = ({ onComplete }) => {
       cancelAnimationFrame(animationFrameId);
     };
   }, []);
+
+  const prefersReducedMotion = typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
+  
+  const motionConfig = {
+    ui: {
+      firstPaintDelayMs: prefersReducedMotion ? 0 : 300,
+      contentFadeDurationMs: prefersReducedMotion ? 0 : 1200,
+      itemRevealDurationMs: prefersReducedMotion ? 0 : 1000,
+      itemStaggerMs: 0,
+      breatheIntroDelayMs: prefersReducedMotion ? 0 : 1000,
+      cardExitDurationMs: prefersReducedMotion ? 0 : 1000,
+      overlayFadeDurationMs: prefersReducedMotion ? 0 : 1200
+    },
+    breathing: {
+      inhaleSeconds: prefersReducedMotion ? 1 : 4,
+      holdSeconds: prefersReducedMotion ? 1 : 7,
+      exhaleSeconds: prefersReducedMotion ? 1 : 8,
+      tickMs: 1000 
+    }
+  };
 
   const getRevealClass = (index: number) => {
     let classes = "reveal-item";

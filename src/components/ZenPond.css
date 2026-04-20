@@ -361,3 +361,27 @@
         max-width: 500px;
     }
 }
+
+@media (prefers-reduced-motion: reduce) {
+    .zen-pond-root {
+        animation: none;
+    }
+    
+    .zen-pond-root #ui-container,
+    .zen-pond-root .card,
+    .zen-pond-root .reveal-item,
+    .zen-pond-root .btn,
+    .zen-pond-root .breathing-circle,
+    .zen-pond-root .breathing-circle::after,
+    .zen-pond-root .breathing-count,
+    .zen-pond-root .breathing-label-text {
+        transition-duration: 0ms !important;
+        transition-delay: 0ms !important;
+        animation-duration: 0ms !important;
+        animation-iteration-count: 1 !important;
+    }
+    
+    .zen-pond-root .btn:active {
+        transform: none;
+    }
+}

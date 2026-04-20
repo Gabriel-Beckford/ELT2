@@ -144,13 +144,14 @@ export const MemorySettings: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1">
           <div className="flex justify-between items-center">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Full Name</label>
+            <label htmlFor="profile-name" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Full Name</label>
             {profile.name && (
               <button onClick={() => clearField('name')} className="text-[10px] text-slate-400 hover:text-red-500 transition-colors">Clear</button>
             )}
           </div>
           <div className="relative">
             <input
+              id="profile-name"
               type="text"
               value={profile.name}
               onChange={e => setProfile({ ...profile, name: e.target.value })}
@@ -168,13 +169,14 @@ export const MemorySettings: React.FC = () => {
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
             <div className="flex justify-between items-center">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Age</label>
+              <label htmlFor="profile-age" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Age</label>
               {profile.age && (
                 <button onClick={() => clearField('age')} className="text-[10px] text-slate-400 hover:text-red-500 transition-colors">Clear</button>
               )}
             </div>
             <div className="relative">
               <input
+                id="profile-age"
                 type="text"
                 value={profile.age}
                 onChange={e => setProfile({ ...profile, age: e.target.value })}
@@ -189,13 +191,14 @@ export const MemorySettings: React.FC = () => {
           </div>
           <div className="space-y-1">
             <div className="flex justify-between items-center">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Gender</label>
+              <label htmlFor="profile-gender" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Gender</label>
               {profile.gender && (
                 <button onClick={() => clearField('gender')} className="text-[10px] text-slate-400 hover:text-red-500 transition-colors">Clear</button>
               )}
             </div>
             <div className="relative">
               <input
+                id="profile-gender"
                 type="text"
                 value={profile.gender}
                 onChange={e => setProfile({ ...profile, gender: e.target.value })}
@@ -210,17 +213,20 @@ export const MemorySettings: React.FC = () => {
           </div>
         </div>
 
-        <div className="space-y-1 md:col-span-2">
+        <fieldset className="space-y-1 md:col-span-2 border-none p-0 m-0">
           <div className="flex justify-between items-center">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Kolb Learning Style</label>
+            <legend className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Kolb Learning Style</legend>
             {profile.kolbLearningStyle !== 'Unknown / Not Set' && (
               <button onClick={() => clearField('kolbLearningStyle')} className="text-[10px] text-slate-400 hover:text-red-500 transition-colors">Reset</button>
             )}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2" role="radiogroup" aria-label="Kolb Learning Style">
             {KOLB_STYLES.map(style => (
               <button
                 key={style}
+                type="button"
+                role="radio"
+                aria-checked={profile.kolbLearningStyle === style}
                 onClick={() => setProfile({ ...profile, kolbLearningStyle: style })}
                 className={cn(
                   "px-3 py-2 rounded-lg border text-xs font-medium transition-all text-left",
@@ -233,17 +239,18 @@ export const MemorySettings: React.FC = () => {
               </button>
             ))}
           </div>
-        </div>
+        </fieldset>
 
         <div className="space-y-1 md:col-span-2">
           <div className="flex justify-between items-center">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Qualifications</label>
+            <label htmlFor="profile-qualifications" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Qualifications</label>
             {profile.qualifications && (
               <button onClick={() => clearField('qualifications')} className="text-[10px] text-slate-400 hover:text-red-500 transition-colors">Clear</button>
             )}
           </div>
           <div className="relative">
             <textarea
+              id="profile-qualifications"
               value={profile.qualifications}
               onChange={e => setProfile({ ...profile, qualifications: e.target.value })}
               className={cn(
@@ -259,13 +266,14 @@ export const MemorySettings: React.FC = () => {
 
         <div className="space-y-1 md:col-span-2">
           <div className="flex justify-between items-center">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Unique Learning Needs</label>
+            <label htmlFor="profile-needs" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Unique Learning Needs</label>
             {profile.uniqueLearningNeeds && (
               <button onClick={() => clearField('uniqueLearningNeeds')} className="text-[10px] text-slate-400 hover:text-red-500 transition-colors">Clear</button>
             )}
           </div>
           <div className="relative">
             <textarea
+              id="profile-needs"
               value={profile.uniqueLearningNeeds}
               onChange={e => setProfile({ ...profile, uniqueLearningNeeds: e.target.value })}
               className={cn(
@@ -289,7 +297,7 @@ export const MemorySettings: React.FC = () => {
 
       <div className="flex justify-between pt-4 items-center gap-4">
         {showDeleteConfirm ? (
-          <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-4">
+          <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-4 motion-reduce:animate-none">
             <span className="text-xs font-bold text-red-600 mr-2">Are you sure?</span>
             <button
               onClick={confirmDelete}
@@ -319,7 +327,7 @@ export const MemorySettings: React.FC = () => {
         
         <div className="flex items-center gap-4">
           {saveSuccess && (
-            <span className="text-sm font-medium text-green-600 animate-in fade-in slide-in-from-right-4">
+            <span className="text-sm font-medium text-green-600 animate-in fade-in slide-in-from-right-4 motion-reduce:animate-none">
               Memory saved!
             </span>
           )}

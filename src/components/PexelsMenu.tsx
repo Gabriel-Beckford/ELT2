@@ -56,7 +56,11 @@ export const PexelsMenu: React.FC<PexelsMenuProps> = ({ onSelectImage, onClose }
           <ImageIcon size={16} />
           <span className="text-sm font-semibold">Pexels Images</span>
         </div>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+        <button 
+          onClick={onClose} 
+          className="text-slate-400 hover:text-slate-600 transition-colors"
+          aria-label="Close image picker"
+        >
           <X size={16} />
         </button>
       </div>
@@ -89,6 +93,7 @@ export const PexelsMenu: React.FC<PexelsMenuProps> = ({ onSelectImage, onClose }
                 key={img.id}
                 onClick={() => onSelectImage(img.src.original)}
                 className="relative aspect-square rounded-lg overflow-hidden group border border-slate-200 hover:border-indigo-500 transition-all"
+                aria-label={`Select image: ${img.alt}`}
               >
                 <img
                   src={img.src.medium}

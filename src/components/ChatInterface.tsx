@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Mic, MicOff, Loader2, Cpu, Volume2, Palette } from 'lucide-react';
 import { ThinkingLevel } from "@google/genai";
 import { ChatMessage } from './ChatMessage';
@@ -48,6 +48,7 @@ const AVAILABLE_THEMES = ['indigo', 'rose', 'emerald', 'amber', 'sky'];
 
 export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initialPromptId }) => {
   const user = auth.currentUser;
+  const shouldReduceMotion = useReducedMotion();
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -63,6 +64,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const revealControllerRef = useRef<SoftRevealController | null>(null);
@@ -422,7 +424,17 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
         console.log(`Starting Phase 2: Reviewing with thinking ${agent2Thinking}...`);
         setStreamingMessage(prev => prev ? { ...prev, phase: 'reviewing' } : null);
         
+        // Provide text-only history context to the reviewer so it knows the current stage/step
+        const historyContext = history.map(h => {
+          const textParts = h.parts.map(p => 'text' in p ? p.text : '[image]').join(' ');
+          return `${h.role === 'user' ? 'Learner' : 'Facilitator'}: ${textParts}`;
+        }).join('\n');
+
         let reviewPrompt = `${LEARNING_FACILITATOR_REVIEWER}
+
+<conversation_history_context>
+${historyContext}
+</conversation_history_context>
 
 <learning_facilitator_system_prompt>
 ${fullSystemInstruction}
@@ -432,7 +444,7 @@ ${fullSystemInstruction}
 ${draftContent}
 </draft_response_to_review>`;
         
-        let reviewerInstruction = "You are a senior pedagogical supervisor. Validate the draft against the system prompt provided. Output ONLY the final, checked, learner-facing response and nothing else.";
+        let reviewerInstruction = "You are a senior pedagogical supervisor. Validate the draft against the system prompt and conversation history provided. Output ONLY the final, checked, learner-facing response and nothing else.";
 
         const reviewStream = streamChat(
           [{ role: 'user', parts: [{ text: reviewPrompt }] }], 
@@ -473,18 +485,27 @@ ${draftContent}
         let { content: finalContent, reviewThoughts: scorecard } = parseReviewerOutput(fullReviewText);
         
         let extractedImagePrompt: string | undefined = undefined;
-        const quoteRegex = /Use this image-generation prompt exactly:\s*\"([\s\S]*?)\"/i;
-        const match = quoteRegex.exec(finalContent);
-        if (match) {
-          extractedImagePrompt = match[1].trim();
-          finalContent = finalContent.replace(match[0], '').trim();
+        
+        // Try tag-based extraction first
+        const tagRegex = /<image_prompt>([\s\S]*?)<\/image_prompt>/i;
+        const tagMatch = tagRegex.exec(finalContent);
+        if (tagMatch) {
+          extractedImagePrompt = tagMatch[1].trim();
+          finalContent = finalContent.replace(tagMatch[0], '').trim();
         } else {
-          // Fallback if not perfectly enclosed in quotes
-          const fallbackRegex = /Use this image-generation prompt exactly:\s*([\s\S]*?)(\n\s*Then|\n\s*$|$)/i;
-          const fb = fallbackRegex.exec(finalContent);
-          if (fb) {
-            extractedImagePrompt = fb[1].trim();
-            finalContent = finalContent.replace(fb[0], '').trim();
+          // Fallback to legacy phrases
+          const quoteRegex = /Use this image-generation prompt exactly:\s*\"([\s\S]*?)\"/i;
+          const match = quoteRegex.exec(finalContent);
+          if (match) {
+            extractedImagePrompt = match[1].trim();
+            finalContent = finalContent.replace(match[0], '').trim();
+          } else {
+            const fallbackRegex = /Use this image-generation prompt exactly:\s*([\s\S]*?)(\n\s*Then|\n\s*$|$)/i;
+            const fb = fallbackRegex.exec(finalContent);
+            if (fb) {
+              extractedImagePrompt = fb[1].trim();
+              finalContent = finalContent.replace(fb[0], '').trim();
+            }
           }
         }
 
@@ -572,10 +593,55 @@ ${draftContent}
     }
   };
 
+  const handleMenuTriggerKeyDown = (e: React.KeyboardEvent, isOpen: boolean, setIsOpen: (v: boolean) => void) => {
+    if (e.key === 'ArrowDown' || (e.key === ' ' && !isOpen) || (e.key === 'Enter' && !isOpen)) {
+      e.preventDefault();
+      setIsOpen(true);
+      setFocusedIndex(0);
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
+  const handleMenuKeyDown = (e: React.KeyboardEvent, itemsLength: number, onSelect: (index: number) => void, setIsOpen: (v: boolean) => void) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedIndex(prev => (prev + 1) % itemsLength);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedIndex(prev => (prev - 1 + itemsLength) % itemsLength);
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (focusedIndex >= 0) {
+        onSelect(focusedIndex);
+      }
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
+  const handleTabKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      setSettingsTab('memory');
+      setTimeout(() => document.getElementById('tab-memory')?.focus(), 0);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      setSettingsTab('mode');
+      setTimeout(() => document.getElementById('tab-ai')?.focus(), 0);
+    }
+  };
+
+  useEffect(() => {
+    if (!isModelMenuOpen && !isVoiceMenuOpen && !isThemeMenuOpen) {
+      setFocusedIndex(-1);
+    }
+  }, [isModelMenuOpen, isVoiceMenuOpen, isThemeMenuOpen]);
+
   return (
     <div className={cn("flex h-screen w-full bg-slate-50 font-sans text-slate-900 overflow-hidden", `theme-${selectedTheme}`)}>
       {/* Sidebar */}
-      <aside className="hidden md:flex w-64 flex-col border-r border-slate-200 bg-white">
+      <aside aria-label="Chat history" className="hidden md:flex w-64 flex-col border-r border-slate-200 bg-white">
         <div className="p-4 border-b border-slate-100">
           <button 
             onClick={() => setActiveChatId(null)}
@@ -600,7 +666,7 @@ ${draftContent}
         </div>
         <div className="p-4 border-t border-slate-100">
           <div className="flex items-center gap-3 mb-4">
-            <img src={user?.photoURL || ''} className="h-8 w-8 rounded-full border border-slate-200" alt="" />
+            <img src={user?.photoURL || ''} className="h-8 w-8 rounded-full border border-slate-200" alt={user?.displayName ? `Profile photo of ${user.displayName}` : "User profile photo"} />
             <div className="flex-1 overflow-hidden">
               <p className="text-xs font-bold truncate">{user?.displayName}</p>
               <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
@@ -617,7 +683,7 @@ ${draftContent}
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6 shadow-sm z-10">
+        <header aria-label="Chat header" className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6 shadow-sm z-10">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
               <Sparkles size={18} />
@@ -636,6 +702,8 @@ ${draftContent}
                 isConnecting && "opacity-70 cursor-not-allowed"
               )}
               title="Live Audio"
+              aria-label={isLive ? "Stop live audio" : "Start live audio"}
+              aria-pressed={isLive}
             >
               {isConnecting ? (
                 <Loader2 size={16} className="animate-spin" />
@@ -663,6 +731,8 @@ ${draftContent}
                   : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
               )}
               title="System Settings"
+              aria-label={isSystemPromptOpen ? "Close settings" : "Open settings"}
+              aria-pressed={isSystemPromptOpen}
             >
               <Settings size={18} />
               <span className="hidden sm:inline">Settings</span>
@@ -671,6 +741,7 @@ ${draftContent}
               onClick={clearChat}
               className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
               title="Clear chat"
+              aria-label="Clear current chat"
             >
               <Trash2 size={18} />
             </button>
@@ -681,16 +752,23 @@ ${draftContent}
         <AnimatePresence>
           {isSystemPromptOpen && (
             <motion.div
-              initial={{ height: 0, opacity: 0 }}
+              initial={{ height: shouldReduceMotion ? 'auto' : 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
+              exit={{ height: shouldReduceMotion ? 'auto' : 0, opacity: 0 }}
               className="overflow-hidden border-b border-slate-200 bg-slate-50 shrink-0"
+              role="region"
+              aria-label="Settings panel"
             >
               <div className="max-h-[60vh] overflow-y-auto">
                 <div className="mx-auto max-w-3xl p-4 space-y-6">
-                <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+                <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-fit" role="tablist">
                   <button
+                    id="tab-ai"
+                    role="tab"
+                    aria-selected={settingsTab === 'mode'}
+                    aria-controls="panel-ai"
                     onClick={() => setSettingsTab('mode')}
+                    onKeyDown={handleTabKeyDown}
                     className={cn(
                       "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
                       settingsTab === 'mode' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
@@ -699,7 +777,12 @@ ${draftContent}
                     AI Settings
                   </button>
                   <button
+                    id="tab-memory"
+                    role="tab"
+                    aria-selected={settingsTab === 'memory'}
+                    aria-controls="panel-memory"
                     onClick={() => setSettingsTab('memory')}
+                    onKeyDown={handleTabKeyDown}
                     className={cn(
                       "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
                       settingsTab === 'memory' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
@@ -710,17 +793,23 @@ ${draftContent}
                 </div>
 
                 {settingsTab === 'mode' ? (
-                  <>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+                  <div id="panel-ai" role="tabpanel" aria-labelledby="tab-ai" className="space-y-4">
+                    <div className="flex items-center justify-between pb-4 border-b border-slate-200">
                         <div className="flex items-center gap-2">
                           <Bot size={16} className="text-slate-500" />
                           <h3 className="text-sm font-semibold text-slate-700">Language Model</h3>
                         </div>
                         <div className="relative">
                           <button
+                            id="model-trigger"
                             onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
+                            onKeyDown={(e) => handleMenuTriggerKeyDown(e, isModelMenuOpen, setIsModelMenuOpen)}
                             className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium"
+                            aria-haspopup="listbox"
+                            aria-expanded={isModelMenuOpen}
+                            aria-controls="model-list"
+                            aria-activedescendant={focusedIndex >= 0 && isModelMenuOpen ? `model-option-${focusedIndex}` : undefined}
+                            aria-label={isModelMenuOpen ? "Close model menu" : "Open model menu"}
                           >
                             {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || selectedModel}
                             <ChevronDown size={14} className={cn("text-slate-400 transition-transform", isModelMenuOpen && "rotate-180")} />
@@ -729,14 +818,28 @@ ${draftContent}
                           <AnimatePresence>
                             {isModelMenuOpen && (
                               <motion.div
-                                initial={{ opacity: 0, y: -5 }}
+                                id="model-list"
+                                role="listbox"
+                                aria-labelledby="model-trigger"
+                                onKeyDown={(e) => handleMenuKeyDown(e, AVAILABLE_MODELS.length, (idx) => {
+                                  const model = AVAILABLE_MODELS[idx];
+                                  setSelectedModel(model.id);
+                                  setIsModelMenuOpen(false);
+                                  if (activeChatId) {
+                                    updateDoc(doc(db, 'chats', activeChatId), { selectedModel: model.id });
+                                  }
+                                }, setIsModelMenuOpen)}
+                                initial={{ opacity: 0, y: shouldReduceMotion ? 0 : -5 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -5 }}
-                                className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-20"
+                                exit={{ opacity: 0, y: shouldReduceMotion ? 0 : -5 }}
+                                className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-20 focus:outline-none"
                               >
-                                {AVAILABLE_MODELS.map(model => (
+                                {AVAILABLE_MODELS.map((model, idx) => (
                                   <button
                                     key={model.id}
+                                    id={`model-option-${idx}`}
+                                    role="option"
+                                    aria-selected={selectedModel === model.id}
                                     onClick={() => {
                                       setSelectedModel(model.id);
                                       setIsModelMenuOpen(false);
@@ -746,7 +849,8 @@ ${draftContent}
                                     }}
                                     className={cn(
                                       "w-full flex items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors",
-                                      selectedModel === model.id ? "bg-indigo-50/50 text-indigo-700 font-semibold" : "text-slate-700"
+                                      selectedModel === model.id ? "bg-indigo-50/50 text-indigo-700 font-semibold" : "text-slate-700",
+                                      focusedIndex === idx && "bg-slate-100"
                                     )}
                                   >
                                     <span>{model.name}</span>
@@ -768,8 +872,15 @@ ${draftContent}
                         </div>
                         <div className="relative">
                           <button
+                            id="voice-trigger"
                             onClick={() => setIsVoiceMenuOpen(!isVoiceMenuOpen)}
+                            onKeyDown={(e) => handleMenuTriggerKeyDown(e, isVoiceMenuOpen, setIsVoiceMenuOpen)}
                             className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium"
+                            aria-haspopup="listbox"
+                            aria-expanded={isVoiceMenuOpen}
+                            aria-controls="voice-list"
+                            aria-activedescendant={focusedIndex >= 0 && isVoiceMenuOpen ? `voice-option-${focusedIndex}` : undefined}
+                            aria-label={isVoiceMenuOpen ? "Close voice menu" : "Open voice menu"}
                           >
                             {selectedVoice}
                             <ChevronDown size={14} className={cn("text-slate-400 transition-transform", isVoiceMenuOpen && "rotate-180")} />
@@ -778,14 +889,28 @@ ${draftContent}
                           <AnimatePresence>
                             {isVoiceMenuOpen && (
                               <motion.div
-                                initial={{ opacity: 0, y: -5 }}
+                                id="voice-list"
+                                role="listbox"
+                                aria-labelledby="voice-trigger"
+                                onKeyDown={(e) => handleMenuKeyDown(e, AVAILABLE_VOICES.length, (idx) => {
+                                  const voice = AVAILABLE_VOICES[idx];
+                                  setSelectedVoice(voice);
+                                  setIsVoiceMenuOpen(false);
+                                  if (activeChatId) {
+                                    updateDoc(doc(db, 'chats', activeChatId), { selectedVoice: voice });
+                                  }
+                                }, setIsVoiceMenuOpen)}
+                                initial={{ opacity: 0, y: shouldReduceMotion ? 0 : -5 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -5 }}
-                                className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-20"
+                                exit={{ opacity: 0, y: shouldReduceMotion ? 0 : -5 }}
+                                className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-20 focus:outline-none"
                               >
-                                {AVAILABLE_VOICES.map(voice => (
+                                {AVAILABLE_VOICES.map((voice, idx) => (
                                   <button
                                     key={voice}
+                                    id={`voice-option-${idx}`}
+                                    role="option"
+                                    aria-selected={selectedVoice === voice}
                                     onClick={() => {
                                       setSelectedVoice(voice);
                                       setIsVoiceMenuOpen(false);
@@ -795,7 +920,8 @@ ${draftContent}
                                     }}
                                     className={cn(
                                       "w-full flex items-center px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors",
-                                      selectedVoice === voice ? "bg-indigo-50/50 text-indigo-700 font-semibold" : "text-slate-700"
+                                      selectedVoice === voice ? "bg-indigo-50/50 text-indigo-700 font-semibold" : "text-slate-700",
+                                      focusedIndex === idx && "bg-slate-100"
                                     )}
                                   >
                                     {voice}
@@ -814,8 +940,15 @@ ${draftContent}
                         </div>
                         <div className="relative">
                           <button
+                            id="theme-trigger"
                             onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
+                            onKeyDown={(e) => handleMenuTriggerKeyDown(e, isThemeMenuOpen, setIsThemeMenuOpen)}
                             className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium capitalize"
+                            aria-haspopup="listbox"
+                            aria-expanded={isThemeMenuOpen}
+                            aria-controls="theme-list"
+                            aria-activedescendant={focusedIndex >= 0 && isThemeMenuOpen ? `theme-option-${focusedIndex}` : undefined}
+                            aria-label={isThemeMenuOpen ? "Close color menu" : "Open color menu"}
                           >
                             {selectedTheme}
                             <ChevronDown size={14} className={cn("text-slate-400 transition-transform", isThemeMenuOpen && "rotate-180")} />
@@ -824,14 +957,28 @@ ${draftContent}
                           <AnimatePresence>
                             {isThemeMenuOpen && (
                               <motion.div
-                                initial={{ opacity: 0, y: -5 }}
+                                id="theme-list"
+                                role="listbox"
+                                aria-labelledby="theme-trigger"
+                                onKeyDown={(e) => handleMenuKeyDown(e, AVAILABLE_THEMES.length, (idx) => {
+                                  const themeName = AVAILABLE_THEMES[idx];
+                                  setSelectedTheme(themeName);
+                                  setIsThemeMenuOpen(false);
+                                  if (activeChatId) {
+                                    updateDoc(doc(db, 'chats', activeChatId), { selectedTheme: themeName });
+                                  }
+                                }, setIsThemeMenuOpen)}
+                                initial={{ opacity: 0, y: shouldReduceMotion ? 0 : -5 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -5 }}
-                                className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-20"
+                                exit={{ opacity: 0, y: shouldReduceMotion ? 0 : -5 }}
+                                className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-20 focus:outline-none"
                               >
-                                {AVAILABLE_THEMES.map(themeName => (
+                                {AVAILABLE_THEMES.map((themeName, idx) => (
                                   <button
                                     key={themeName}
+                                    id={`theme-option-${idx}`}
+                                    role="option"
+                                    aria-selected={selectedTheme === themeName}
                                     onClick={() => {
                                       setSelectedTheme(themeName);
                                       setIsThemeMenuOpen(false);
@@ -841,7 +988,8 @@ ${draftContent}
                                     }}
                                     className={cn(
                                       "w-full flex items-center px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors capitalize",
-                                      selectedTheme === themeName ? "bg-indigo-50/50 text-indigo-700 font-semibold" : "text-slate-700"
+                                      selectedTheme === themeName ? "bg-indigo-50/50 text-indigo-700 font-semibold" : "text-slate-700",
+                                      focusedIndex === idx && "bg-slate-100"
                                     )}
                                   >
                                     {themeName}
@@ -854,12 +1002,13 @@ ${draftContent}
                       </div>
 
                       <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-semibold text-slate-700">Search Grounding</h3>
+                        <label htmlFor="grounding-toggle" className="text-sm font-semibold text-slate-700 cursor-pointer">Search Grounding</label>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded">
                             {useGrounding ? 'Enabled' : 'Disabled'}
                           </span>
                           <input 
+                            id="grounding-toggle"
                             type="checkbox" 
                             checked={useGrounding}
                             onChange={(e) => {
@@ -868,7 +1017,7 @@ ${draftContent}
                                 updateDoc(doc(db, 'chats', activeChatId), { useGrounding: e.target.checked });
                               }
                             }}
-                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                           />
                         </div>
                       </div>
@@ -877,7 +1026,7 @@ ${draftContent}
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-2">
                             <Cpu size={16} className="text-indigo-600" />
-                            <span className="text-sm font-semibold text-indigo-900">Thinking Effort</span>
+                            <label htmlFor="thinking-slider" className="text-sm font-semibold text-indigo-900 cursor-pointer">Thinking Effort</label>
                           </div>
                           <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider bg-indigo-100 px-2 py-0.5 rounded">
                             {SLIDER_POINTS.find(p => p.id === sliderValue)?.label}
@@ -886,11 +1035,16 @@ ${draftContent}
                         
                         <div className="px-2">
                           <input
+                            id="thinking-slider"
                             type="range"
                             min="1"
                             max="3"
                             step="1"
                             value={sliderValue}
+                            aria-valuemin={1}
+                            aria-valuemax={3}
+                            aria-valuenow={sliderValue}
+                            aria-valuetext={SLIDER_POINTS.find(p => p.id === sliderValue)?.label}
                             onChange={(e) => {
                               const val = parseInt(e.target.value);
                               setSliderValue(val);
@@ -911,9 +1065,8 @@ ${draftContent}
                           Staged Thinking: Agent 1 (Drafting) uses full effort, while subsequent agents use progressively less to optimize speed.
                         </p>
                       </div>
-                    </div>
 
-                    <div className="pt-4 border-t border-slate-200">
+                      <div className="pt-4 border-t border-slate-200">
                       <h3 className="text-sm font-semibold text-slate-700 mb-3">Current System Prompt</h3>
                       <div className="bg-white border border-slate-200 rounded-xl p-4 max-h-48 overflow-y-auto">
                         <pre className="text-xs text-slate-600 whitespace-pre-wrap font-mono">
@@ -921,9 +1074,11 @@ ${draftContent}
                         </pre>
                       </div>
                     </div>
-                  </>
+                  </div>
                 ) : (
-                  <MemorySettings />
+                  <div id="panel-memory" role="tabpanel" aria-labelledby="tab-memory">
+                    <MemorySettings />
+                  </div>
                 )}
                 </div>
               </div>
@@ -932,7 +1087,7 @@ ${draftContent}
         </AnimatePresence>
 
         {/* Main Chat Area */}
-        <main className="flex-1 overflow-y-auto relative">
+        <main id="main-content" aria-label="Main chat area" className="flex-1 overflow-y-auto relative" tabIndex={-1}>
           {isLive && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-sm border border-indigo-100 shadow-lg rounded-2xl p-4 max-w-md w-[90%] text-center">
               <div className="flex items-center justify-center gap-3 mb-2">
@@ -950,7 +1105,7 @@ ${draftContent}
             {messages.length === 0 && !liveUserText && !liveModelText ? (
               <div className="flex flex-col items-center justify-center h-[60vh] text-center px-6">
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
+                  initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   className="mb-6 rounded-2xl bg-white p-6 shadow-xl border border-slate-100"
                 >
@@ -1064,7 +1219,7 @@ ${draftContent}
         </main>
 
         {/* Input Area */}
-        <footer className="border-t border-slate-200 bg-white p-4">
+        <footer aria-label="Message input area" className="border-t border-slate-200 bg-white p-4">
           <div className="mx-auto max-w-3xl">
             <ChatInput onSend={handleSend} disabled={isLoading} />
             <p className="mt-2 text-center text-[10px] text-slate-400 uppercase tracking-widest">

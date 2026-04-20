@@ -60,6 +60,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, disabled }) => {
           <button
             onClick={() => setSelectedImage(null)}
             className="absolute -top-2 -right-2 bg-slate-800 text-white rounded-full p-1 hover:bg-slate-700 transition-colors"
+            aria-label="Remove selected image"
           >
             <X size={12} />
           </button>
@@ -78,6 +79,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, disabled }) => {
             isPexelsOpen ? "bg-indigo-100 text-indigo-600" : "text-slate-400 hover:bg-slate-100 hover:text-slate-600"
           )}
           title="Add image from Pexels"
+          aria-label={isPexelsOpen ? "Close image picker" : "Open image picker"}
+          aria-pressed={isPexelsOpen}
         >
           <ImageIcon size={18} />
         </button>
@@ -88,7 +91,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, disabled }) => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Message Aura..."
+          placeholder="Message Refleksyon..."
           disabled={disabled}
           className="flex-1 bg-transparent px-3 py-2 text-sm outline-none resize-none max-h-[200px] min-h-[40px]"
         />
@@ -102,6 +105,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, disabled }) => {
               ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md" 
               : "bg-slate-100 text-slate-400 cursor-not-allowed"
           )}
+          aria-label="Send message"
         >
           <ArrowUp size={18} />
         </button>

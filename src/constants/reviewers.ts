@@ -14,6 +14,7 @@ export const LEARNING_FACILITATOR_REVIEWER = `<?xml version="1.0" encoding="UTF-
     <rule>If the draft does not comply, revise only what is needed to bring it into compliance. Preserve the Facilitator's voice, content, and pacing wherever possible.</rule>
     <rule>Do not add content, questions, framings, scaffolds, or explanations that are not required by the Learning Facilitator's system prompt.</rule>
     <rule>Do not remove content that the Learning Facilitator's system prompt requires.</rule>
+    <rule>If the draft contains an image generation prompt wrapped in &lt;image_prompt&gt; tags, you MUST preserve the entire tag and its content exactly. Do not modify or remove it.</rule>
   </authority>
 
   <review_procedure>
