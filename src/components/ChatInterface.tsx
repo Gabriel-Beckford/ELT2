@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Mic, MicOff, Loader2, Cpu, Volume2, Palette } from 'lucide-react';
+import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Mic, MicOff, Loader2, Cpu, Volume2, Palette, Waves } from 'lucide-react';
 import { ThinkingLevel } from "@google/genai";
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
@@ -47,7 +47,11 @@ const AVAILABLE_MODELS = [
 const AVAILABLE_VOICES = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Aoede'];
 const AVAILABLE_THEMES = ['indigo', 'rose', 'emerald', 'amber', 'sky'];
 
-export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initialPromptId }) => {
+export const ChatInterface: React.FC<{ 
+  initialPromptId?: PromptId;
+  onNavigateToIntro?: () => void;
+  onNavigateToJourney?: () => void;
+}> = ({ initialPromptId, onNavigateToIntro, onNavigateToJourney }) => {
   const user = auth.currentUser;
   const shouldReduceMotion = useReducedMotion();
   const [chats, setChats] = useState<Chat[]>([]);
@@ -781,6 +785,22 @@ ${draftContent}
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {/* Navigation Links */}
+          <div className="pb-2 mb-2 border-b border-slate-100 space-y-1">
+            <button
+              onClick={onNavigateToIntro}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-all focus-ring"
+            >
+              <Waves size={18} className="text-indigo-600" /> Bassin Bleu
+            </button>
+            <button
+              onClick={onNavigateToJourney}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-all focus-ring"
+            >
+              <BookOpen size={18} className="text-indigo-600" /> Learning Journey
+            </button>
+          </div>
+
           {chats.map(chat => (
             <button
               key={chat.id}
