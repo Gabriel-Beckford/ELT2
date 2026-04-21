@@ -35,6 +35,27 @@ export const ZenPond: React.FC<ZenPondProps> = ({ onComplete }) => {
     { type: 'text', title: "You are centered.", text: "Whenever you are ready, let's begin our journey together.", btn: "Start Journey" }
   ];
 
+  const prefersReducedMotion = typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
+  
+  const motionConfig = {
+    ui: {
+      firstPaintDelayMs: prefersReducedMotion ? 0 : 300,
+      contentFadeDurationMs: prefersReducedMotion ? 0 : 1200,
+      itemRevealDurationMs: prefersReducedMotion ? 0 : 1000,
+      itemStaggerMs: 0,
+      breatheIntroDelayMs: prefersReducedMotion ? 0 : 1000,
+      cardExitDurationMs: prefersReducedMotion ? 0 : 1000,
+      overlayFadeDurationMs: prefersReducedMotion ? 0 : 1200,
+      transitionDurationMs: prefersReducedMotion ? 0 : 1000
+    },
+    breathing: {
+      inhaleSeconds: prefersReducedMotion ? 0 : 4,
+      holdSeconds: prefersReducedMotion ? 0 : 7,
+      exhaleSeconds: prefersReducedMotion ? 0 : 8,
+      tickMs: 1000 
+    }
+  };
+
   const step = flowSteps[currentStep];
 
   useEffect(() => {
@@ -47,7 +68,12 @@ export const ZenPond: React.FC<ZenPondProps> = ({ onComplete }) => {
 
   useEffect(() => {
     if (step.type === 'breathe') {
-      setTimeout(startBreathingCycle, motionConfig.ui.breatheIntroDelayMs);
+      if (prefersReducedMotion) {
+        // Skip the cycle entirely and advance immediately
+        nextStep(undefined, true);
+      } else {
+        setTimeout(startBreathingCycle, motionConfig.ui.breatheIntroDelayMs);
+      }
     }
   }, [currentStep]);
 
@@ -66,21 +92,20 @@ export const ZenPond: React.FC<ZenPondProps> = ({ onComplete }) => {
     setIsTransitioning(true);
     setIsItemsVisible(false);
 
-    // Wait for fade out (matching --dur-fast in CSS)
+    // Wait for fade out
     setTimeout(() => {
       setCurrentStep(prev => prev + 1);
       
-      // Double RAF to ensure the new step content is in the DOM before triggering fade-in
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           setIsItemsVisible(true);
           // Wait for fade in
           setTimeout(() => {
             setIsTransitioning(false);
-          }, 1000);
+          }, motionConfig.ui.transitionDurationMs);
         });
       });
-    }, 1000); 
+    }, motionConfig.ui.transitionDurationMs); 
   };
 
   const handleSkip = () => {
@@ -88,12 +113,15 @@ export const ZenPond: React.FC<ZenPondProps> = ({ onComplete }) => {
     setIsItemsExiting(true);
     setIsCardVisible(false);
     setIsExitingFinal(true);
+    
+    const exitDuration = prefersReducedMotion ? 0 : 500;
+
     setTimeout(() => {
       setIsUiVisible(false);
       setTimeout(() => {
         onComplete(selectedPathway || 'facilitator');
-      }, 500);
-    }, 500);
+      }, exitDuration);
+    }, exitDuration);
   };
 
   const setCountdownValue = (value: number | string) => {
@@ -115,6 +143,11 @@ export const ZenPond: React.FC<ZenPondProps> = ({ onComplete }) => {
   };
 
   const startBreathingCycle = () => {
+    if (prefersReducedMotion) {
+      nextStep(undefined, true);
+      return;
+    }
+    
     setIsTransitioning(true);
     
     // Inhale
@@ -446,26 +479,6 @@ export const ZenPond: React.FC<ZenPondProps> = ({ onComplete }) => {
     };
   }, []);
 
-  const prefersReducedMotion = typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
-  
-  const motionConfig = {
-    ui: {
-      firstPaintDelayMs: prefersReducedMotion ? 0 : 300,
-      contentFadeDurationMs: prefersReducedMotion ? 0 : 1200,
-      itemRevealDurationMs: prefersReducedMotion ? 0 : 1000,
-      itemStaggerMs: 0,
-      breatheIntroDelayMs: prefersReducedMotion ? 0 : 1000,
-      cardExitDurationMs: prefersReducedMotion ? 0 : 1000,
-      overlayFadeDurationMs: prefersReducedMotion ? 0 : 1200
-    },
-    breathing: {
-      inhaleSeconds: prefersReducedMotion ? 1 : 4,
-      holdSeconds: prefersReducedMotion ? 1 : 7,
-      exhaleSeconds: prefersReducedMotion ? 1 : 8,
-      tickMs: 1000 
-    }
-  };
-
   const getRevealClass = (index: number) => {
     let classes = "reveal-item";
     if (isItemsVisible) classes += " is-visible";
@@ -474,7 +487,7 @@ export const ZenPond: React.FC<ZenPondProps> = ({ onComplete }) => {
   };
 
   const getRevealStyle = (index: number) => ({
-    transitionDuration: `1000ms`,
+    transitionDuration: `${motionConfig.ui.itemRevealDurationMs}ms`,
     transitionDelay: `0ms`
   });
 

@@ -65,4 +65,8 @@
   body {
     @apply bg-slate-50 text-slate-900 antialiased;
   }
+
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 transition-shadow;
+  }
 }

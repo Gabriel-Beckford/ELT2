@@ -15,7 +15,7 @@ export const AuthScreen: React.FC = () => {
         </div>
         <button
           onClick={signIn}
-          className="flex w-full items-center justify-center gap-3 rounded-xl bg-slate-900 px-6 py-4 text-lg font-semibold text-white transition-all hover:bg-slate-800 hover:shadow-lg active:scale-[0.98]"
+          className="flex w-full items-center justify-center gap-3 rounded-xl bg-slate-900 px-6 py-4 text-lg font-semibold text-white transition-all hover:bg-slate-800 hover:shadow-lg active:scale-[0.98] focus-ring"
         >
           <LogIn size={20} />
           Sign in with Google

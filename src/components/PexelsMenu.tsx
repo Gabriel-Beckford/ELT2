@@ -17,12 +17,23 @@ interface PexelsMenuProps {
   onClose: () => void;
 }
 
-export const PexelsMenu: React.FC<PexelsMenuProps> = ({ onSelectImage, onClose }) => {
+export const PexelsMenu: React.FC<PexelsMenuProps & { triggerRef?: React.RefObject<HTMLButtonElement> }> = ({ onSelectImage, onClose, triggerRef }) => {
   const [query, setQuery] = useState('');
   const [images, setImages] = useState<PexelsImage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        triggerRef?.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, triggerRef]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -58,7 +69,7 @@ export const PexelsMenu: React.FC<PexelsMenuProps> = ({ onSelectImage, onClose }
         </div>
         <button 
           onClick={onClose} 
-          className="text-slate-400 hover:text-slate-600 transition-colors"
+          className="text-slate-400 hover:text-slate-600 transition-colors focus-ring"
           aria-label="Close image picker"
         >
           <X size={16} />
@@ -67,15 +78,21 @@ export const PexelsMenu: React.FC<PexelsMenuProps> = ({ onSelectImage, onClose }
       
       <div className="p-3">
         <form onSubmit={searchImages} className="relative">
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search images to convey feelings..."
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-4 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
-          />
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <label htmlFor="pexels-search" className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
+            Search Images
+          </label>
+          <div className="relative">
+            <input
+              id="pexels-search"
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search images to convey feelings..."
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-4 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none transition-all focus-ring"
+            />
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          </div>
         </form>
       </div>
 
@@ -92,7 +109,7 @@ export const PexelsMenu: React.FC<PexelsMenuProps> = ({ onSelectImage, onClose }
               <button
                 key={img.id}
                 onClick={() => onSelectImage(img.src.original)}
-                className="relative aspect-square rounded-lg overflow-hidden group border border-slate-200 hover:border-indigo-500 transition-all"
+                className="relative aspect-square rounded-lg overflow-hidden group border border-slate-200 hover:border-indigo-500 transition-all focus-ring"
                 aria-label={`Select image: ${img.alt}`}
               >
                 <img

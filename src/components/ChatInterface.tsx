@@ -68,6 +68,10 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const revealControllerRef = useRef<SoftRevealController | null>(null);
+  const settingsTriggerRef = useRef<HTMLButtonElement>(null);
+  const modelTriggerRef = useRef<HTMLButtonElement>(null);
+  const voiceTriggerRef = useRef<HTMLButtonElement>(null);
+  const themeTriggerRef = useRef<HTMLButtonElement>(null);
 
   // Live audio draft states
   const [liveUserText, setLiveUserText] = useState('');
@@ -235,6 +239,29 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       revealControllerRef.current?.destroy();
     };
   }, []);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // Priority: sub-menus first
+        if (isModelMenuOpen) {
+          setIsModelMenuOpen(false);
+          modelTriggerRef.current?.focus();
+        } else if (isVoiceMenuOpen) {
+          setIsVoiceMenuOpen(false);
+          voiceTriggerRef.current?.focus();
+        } else if (isThemeMenuOpen) {
+          setIsThemeMenuOpen(false);
+          themeTriggerRef.current?.focus();
+        } else if (isSystemPromptOpen) {
+          setIsSystemPromptOpen(false);
+          settingsTriggerRef.current?.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isModelMenuOpen, isVoiceMenuOpen, isThemeMenuOpen, isSystemPromptOpen]);
 
   const scrollToBottom = () => {
     if (scrollRef.current) {
@@ -645,7 +672,7 @@ ${draftContent}
         <div className="p-4 border-b border-slate-100">
           <button 
             onClick={() => setActiveChatId(null)}
-            className="flex w-full items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
+            className="flex w-full items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100 focus-ring"
           >
             <Plus size={18} /> New Chat
           </button>
@@ -656,7 +683,7 @@ ${draftContent}
               key={chat.id}
               onClick={() => setActiveChatId(chat.id)}
               className={cn(
-                "w-full text-left px-3 py-2 rounded-lg text-sm transition-all truncate",
+                "w-full text-left px-3 py-2 rounded-lg text-sm transition-all truncate focus-ring",
                 activeChatId === chat.id ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-600 hover:bg-slate-50"
               )}
             >
@@ -674,7 +701,7 @@ ${draftContent}
           </div>
           <button 
             onClick={logOut}
-            className="flex w-full items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-all"
+            className="flex w-full items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-all focus-ring"
           >
             <LogOut size={16} /> Sign Out
           </button>
@@ -695,7 +722,7 @@ ${draftContent}
               onClick={isLive ? handleStopLive : handleStartLive}
               disabled={isConnecting}
               className={cn(
-                "flex h-9 px-3 items-center gap-2 rounded-lg text-sm font-medium transition-all shadow-sm",
+                "flex h-9 px-3 items-center gap-2 rounded-lg text-sm font-medium transition-all shadow-sm focus-ring",
                 isLive 
                   ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100" 
                   : "bg-indigo-600 text-white hover:bg-indigo-700",
@@ -723,9 +750,10 @@ ${draftContent}
               )}
             </button>
             <button 
+              ref={settingsTriggerRef}
               onClick={() => setIsSystemPromptOpen(!isSystemPromptOpen)}
               className={cn(
-                "flex h-9 px-3 items-center gap-2 rounded-lg text-sm font-medium transition-colors",
+                "flex h-9 px-3 items-center gap-2 rounded-lg text-sm font-medium transition-colors focus-ring",
                 isSystemPromptOpen 
                   ? "bg-indigo-50 text-indigo-700" 
                   : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
@@ -739,7 +767,7 @@ ${draftContent}
             </button>
             <button 
               onClick={clearChat}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors focus-ring"
               title="Clear chat"
               aria-label="Clear current chat"
             >
@@ -770,7 +798,7 @@ ${draftContent}
                     onClick={() => setSettingsTab('mode')}
                     onKeyDown={handleTabKeyDown}
                     className={cn(
-                      "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                      "px-4 py-1.5 rounded-lg text-xs font-bold transition-all focus-ring",
                       settingsTab === 'mode' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
@@ -784,7 +812,7 @@ ${draftContent}
                     onClick={() => setSettingsTab('memory')}
                     onKeyDown={handleTabKeyDown}
                     className={cn(
-                      "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                      "px-4 py-1.5 rounded-lg text-xs font-bold transition-all focus-ring",
                       settingsTab === 'memory' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
@@ -801,10 +829,11 @@ ${draftContent}
                         </div>
                         <div className="relative">
                           <button
+                            ref={modelTriggerRef}
                             id="model-trigger"
                             onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
                             onKeyDown={(e) => handleMenuTriggerKeyDown(e, isModelMenuOpen, setIsModelMenuOpen)}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium focus-ring"
                             aria-haspopup="listbox"
                             aria-expanded={isModelMenuOpen}
                             aria-controls="model-list"
@@ -848,7 +877,7 @@ ${draftContent}
                                       }
                                     }}
                                     className={cn(
-                                      "w-full flex items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors",
+                                      "w-full flex items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors focus-ring",
                                       selectedModel === model.id ? "bg-indigo-50/50 text-indigo-700 font-semibold" : "text-slate-700",
                                       focusedIndex === idx && "bg-slate-100"
                                     )}
@@ -872,10 +901,11 @@ ${draftContent}
                         </div>
                         <div className="relative">
                           <button
+                            ref={voiceTriggerRef}
                             id="voice-trigger"
                             onClick={() => setIsVoiceMenuOpen(!isVoiceMenuOpen)}
                             onKeyDown={(e) => handleMenuTriggerKeyDown(e, isVoiceMenuOpen, setIsVoiceMenuOpen)}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium focus-ring"
                             aria-haspopup="listbox"
                             aria-expanded={isVoiceMenuOpen}
                             aria-controls="voice-list"
@@ -919,7 +949,7 @@ ${draftContent}
                                       }
                                     }}
                                     className={cn(
-                                      "w-full flex items-center px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors",
+                                      "w-full flex items-center px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors focus-ring",
                                       selectedVoice === voice ? "bg-indigo-50/50 text-indigo-700 font-semibold" : "text-slate-700",
                                       focusedIndex === idx && "bg-slate-100"
                                     )}
@@ -940,10 +970,11 @@ ${draftContent}
                         </div>
                         <div className="relative">
                           <button
+                            ref={themeTriggerRef}
                             id="theme-trigger"
                             onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
                             onKeyDown={(e) => handleMenuTriggerKeyDown(e, isThemeMenuOpen, setIsThemeMenuOpen)}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium capitalize"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium capitalize focus-ring"
                             aria-haspopup="listbox"
                             aria-expanded={isThemeMenuOpen}
                             aria-controls="theme-list"
@@ -987,7 +1018,7 @@ ${draftContent}
                                       }
                                     }}
                                     className={cn(
-                                      "w-full flex items-center px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors capitalize",
+                                      "w-full flex items-center px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors capitalize focus-ring",
                                       selectedTheme === themeName ? "bg-indigo-50/50 text-indigo-700 font-semibold" : "text-slate-700",
                                       focusedIndex === idx && "bg-slate-100"
                                     )}
@@ -1017,7 +1048,7 @@ ${draftContent}
                                 updateDoc(doc(db, 'chats', activeChatId), { useGrounding: e.target.checked });
                               }
                             }}
-                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer focus-ring"
                           />
                         </div>
                       </div>
@@ -1052,7 +1083,7 @@ ${draftContent}
                                 updateDoc(doc(db, 'chats', activeChatId), { sliderValue: val });
                               }
                             }}
-                            className="w-full h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                            className="w-full h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus-ring"
                           />
                           <div className="flex justify-between mt-2">
                             <span className="text-[10px] text-indigo-400 font-medium">Minimal</span>
@@ -1096,7 +1127,11 @@ ${draftContent}
                 </div>
                 <h3 className="font-bold text-indigo-900">Refleksyon Live</h3>
               </div>
-              <p className="text-sm text-slate-600 italic line-clamp-3">
+              <p 
+                className="text-sm text-slate-600 italic line-clamp-3"
+                aria-live="polite"
+                aria-atomic="true"
+              >
                 {transcript || "Listening..."}
               </p>
             </div>
@@ -1128,7 +1163,7 @@ ${draftContent}
                     <button
                       key={i}
                       onClick={() => handleSend(suggestion)}
-                      className="text-left p-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all"
+                      className="text-left p-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all focus-ring"
                     >
                       {suggestion}
                     </button>
@@ -1181,27 +1216,36 @@ ${draftContent}
                 )}
 
                 {streamingMessage && (
-                  <ChatMessage 
-                    message={{
-                      id: 'streaming-model',
-                      role: 'assistant',
-                      content: streamingMessage.content,
-                      draftContent: streamingMessage.draftContent,
-                      draftThoughts: streamingMessage.draftThoughts,
-                      reviewThoughts: streamingMessage.reviewThoughts,
-                      phase: streamingMessage.phase,
-                      model: streamingMessage.model,
-                      modelSettings: streamingMessage.modelSettings,
-                      sources: streamingMessage.sources,
-                      status: 'draft',
-                      timestamp: Date.now()
-                    }}
-                    selectedVoice={selectedVoice}
-                  />
+                  <>
+                    <div className="sr-only" aria-live="polite" aria-atomic="true">
+                      {streamingMessage.phase === 'drafting' && "Refleksyon is drafting..."}
+                      {streamingMessage.phase === 'reviewing' && "Refleksyon is refining..."}
+                      {streamingMessage.phase === 'finalizing' && "Response finalizing..."}
+                    </div>
+                    <ChatMessage 
+                      key="streaming-model"
+                      message={{
+                        id: 'streaming-model',
+                        role: 'assistant',
+                        content: streamingMessage.content,
+                        draftContent: streamingMessage.draftContent,
+                        draftThoughts: streamingMessage.draftThoughts,
+                        reviewThoughts: streamingMessage.reviewThoughts,
+                        phase: streamingMessage.phase,
+                        model: streamingMessage.model,
+                        modelSettings: streamingMessage.modelSettings,
+                        sources: streamingMessage.sources,
+                        status: 'draft',
+                        timestamp: Date.now()
+                      }}
+                      selectedVoice={selectedVoice}
+                    />
+                  </>
                 )}
 
                 {isLoading && !streamingMessage && (
-                  <div className="flex gap-4 p-4 md:p-6 bg-slate-50/50">
+                  <div className="flex gap-4 p-4 md:p-6 bg-slate-50/50" aria-live="polite">
+                    <span className="sr-only">Refleksyon is thinking...</span>
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-indigo-600 text-white border-indigo-500">
                       <Bot size={16} />
                     </div>
