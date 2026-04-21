@@ -1,63 +1,114 @@
-import { GoogleGenAI, Modality, ThinkingLevel } from "@google/genai";
+import { auth } from './firebase';
 
-export const ai = new GoogleGenAI({ 
-  apiKey: process.env.GEMINI_API_KEY || '' 
-});
+async function getAuthHeader() {
+  const user = auth.currentUser;
+  if (!user) throw new Error("User not authenticated");
+  const token = await user.getIdToken();
+  return { 'Authorization': `Bearer ${token}` };
+}
 
-export async function generateImage(prompt: string): Promise<string | undefined> {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-image-preview',
-      contents: {
-        parts: [
-          {
-            text: prompt,
-          },
-        ],
-      },
-      config: {
-        imageConfig: {
-          aspectRatio: "4:3",
-          imageSize: "1K"
-        }
-      } as any,
-    });
-    
-    if (response.candidates && response.candidates.length > 0) {
-      for (const part of response.candidates[0].content?.parts || []) {
-        if (part.inlineData) {
-          const base64EncodeString: string = part.inlineData.data;
-          // Format as complete data URI
-          if (part.inlineData.mimeType) {
-            return `data:${part.inlineData.mimeType};base64,${base64EncodeString}`;
+export const ai = {
+  live: {
+    connect: async (options: any) => {
+      const { model, config, callbacks } = options;
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/api/ai/live`;
+      const ws = new WebSocket(wsUrl);
+
+      const session = {
+        sendRealtimeInput: (data: any) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ realtimeInput: data }));
           }
-          return `data:image/png;base64,${base64EncodeString}`;
+        },
+        sendClientContent: (data: any) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ clientContent: data }));
+          }
+        },
+        send: (data: any) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(data));
+          }
         }
-      }
+      };
+
+      ws.onopen = () => {
+        // Send initial config
+        ws.send(JSON.stringify({ setup: { model, generationConfig: config } }));
+        callbacks?.onopen?.();
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          callbacks?.onmessage?.(data);
+        } catch (e) {
+          console.error("Error parsing Live message:", e);
+        }
+      };
+
+      ws.onclose = () => {
+        callbacks?.onclose?.();
+      };
+
+      ws.onerror = (err) => {
+        callbacks?.onerror?.(err);
+      };
+
+      return session;
     }
+  }
+};
+
+export async function generateImage(prompt: string, model?: string, options?: any, signal?: AbortSignal, traceId?: string): Promise<{url: string, traceId: string} | undefined> {
+  try {
+    const headers = await getAuthHeader();
+    const response = await fetch('/api/ai/image', {
+      method: 'POST',
+      headers: { 
+        ...headers,
+        'Content-Type': 'application/json',
+        'X-Trace-Id': traceId || crypto.randomUUID()
+      },
+      body: JSON.stringify({ prompt, model, options }),
+      signal
+    });
+
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return { url: data.url, traceId: data.traceId || traceId };
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') return undefined;
     console.error("Gemini Image Gen Error:", error);
   }
   return undefined;
 }
-export async function generateSpeech(text: string, voice: string = 'Kore') {
+
+export async function generateSpeech(text: string, voice: string = 'Kore', signal?: AbortSignal) {
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text }] }],
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: voice },
-          },
-        },
+    const headers = await getAuthHeader();
+    const response = await fetch('/api/ai/tts', {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json'
       },
+      body: JSON.stringify({ text, voice }),
+      signal
     });
 
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    return base64Audio;
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return result.data;
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error;
     console.error("Gemini TTS Error:", error);
     throw error;
   }
@@ -67,56 +118,63 @@ export async function* streamChat(
   messages: { role: 'user' | 'model', parts: { text: string }[] }[],
   systemInstruction?: string,
   model: string = "gemini-3-flash-preview",
-  thinkingLevel?: ThinkingLevel,
-  useGrounding: boolean = true
+  thinkingLevel?: any,
+  useGrounding: boolean = true,
+  signal?: AbortSignal,
+  traceId?: string
 ) {
   try {
-    const tools: any[] = [];
-    if (useGrounding) {
-      tools.push({ googleSearch: {} });
+    const headers = await getAuthHeader();
+    const response = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+        'X-Trace-Id': traceId || crypto.randomUUID()
+      },
+      body: JSON.stringify({
+        messages,
+        systemInstruction,
+        model,
+        thinkingLevel,
+        useGrounding
+      }),
+      signal
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Server error: ${response.statusText}`);
     }
 
-    const stream = await ai.models.generateContentStream({
-      model,
-      contents: messages,
-      tools,
-      config: {
-        systemInstruction: systemInstruction || "You are Aura, a helpful and friendly AI assistant. Your responses should be clear, concise, and formatted using Markdown when appropriate. Maintain a professional yet approachable tone.",
-        thinkingConfig: thinkingLevel ? { includeThoughts: true, thinkingLevel } : undefined,
-        includeServerSideToolInvocations: useGrounding ? true : undefined,
-        temperature: 0.7,
-        topP: 0.95,
-        maxOutputTokens: 8192,
-      } as any
-    } as any);
+    if (!response.body) return;
 
-    for await (const chunk of stream) {
-      // Handle grounding metadata (search results)
-      const groundingMetadata = chunk.candidates?.[0]?.groundingMetadata;
-      if (groundingMetadata?.searchEntryPoint?.renderedContent) {
-        // This is the Google Search chip/entry point
-      }
-      
-      if (groundingMetadata?.groundingChunks) {
-        const sources = groundingMetadata.groundingChunks
-          .filter(c => c.web)
-          .map(c => ({
-            title: c.web?.title || 'Untitled Source',
-            url: c.web?.uri || ''
-          }))
-          .filter(s => s.url);
-        
-        if (sources.length > 0) {
-          yield { type: 'sources', content: sources };
-        }
-      }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-      const parts = chunk.candidates?.[0]?.content?.parts || [];
-      for (const part of parts) {
-        if (part.thought) {
-          yield { type: 'thought', content: part.text || '' };
-        } else if (part.text) {
-          yield { type: 'text', content: part.text };
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6);
+          if (dataStr === '[DONE]') return;
+          
+          try {
+            const chunk = JSON.parse(dataStr);
+            if (chunk.type === 'error') {
+              throw new Error(chunk.content);
+            }
+            yield chunk;
+          } catch (e) {
+            console.error("Error parsing SSE chunk:", e);
+          }
         }
       }
     }
