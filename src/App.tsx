@@ -9,24 +9,15 @@ import { auth } from './lib/firebase';
 import { ChatInterface } from './components/ChatInterface';
 import { AuthScreen } from './components/AuthScreen';
 import { ZenPond } from './components/ZenPond';
-import { LearningJourney } from './components/LearningJourney';
+import LearningJourney from './components/LearningJourney';
 import { PromptId } from './constants/prompts';
 import { Loader2 } from 'lucide-react';
 
 export default function App() {
   const [user, loading, error] = useAuthState(auth);
   const [hasCompletedIntro, setHasCompletedIntro] = useState(false);
-  const [hasSeenJourney, setHasSeenJourney] = useState(false);
+  const [hasViewedJourney, setHasViewedJourney] = useState(false);
   const [selectedPathway, setSelectedPathway] = useState<PromptId | null>(null);
-
-  const navigateToIntro = () => {
-    setHasCompletedIntro(false);
-    setHasSeenJourney(false);
-  };
-
-  const navigateToJourney = () => {
-    setHasSeenJourney(false);
-  };
 
   if (loading) {
     return (
@@ -65,7 +56,7 @@ export default function App() {
       );
     }
 
-    if (!hasSeenJourney) {
+    if (!hasViewedJourney) {
       return (
         <>
           <a 
@@ -74,10 +65,11 @@ export default function App() {
           >
             Skip to main content
           </a>
-          <LearningJourney onComplete={() => setHasSeenJourney(true)} />
+          <LearningJourney onComplete={() => setHasViewedJourney(true)} />
         </>
       );
     }
+
     return (
       <>
         <a 
@@ -86,11 +78,7 @@ export default function App() {
         >
           Skip to main content
         </a>
-        <ChatInterface 
-          initialPromptId={selectedPathway || 'facilitator'} 
-          onNavigateToIntro={navigateToIntro}
-          onNavigateToJourney={navigateToJourney}
-        />
+        <ChatInterface initialPromptId={selectedPathway || 'facilitator'} />
       </>
     );
   }

@@ -1,13 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Mic, MicOff, Loader2, Cpu, Volume2, Palette, Waves } from 'lucide-react';
+import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Mic, MicOff, Loader2, Cpu, Volume2, Palette } from 'lucide-react';
 import { ThinkingLevel } from "@google/genai";
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { MemorySettings } from './MemorySettings';
 import { Message, Chat, UserProfile } from '@/src/types';
-import { streamChat } from '@/src/lib/gemini';
-import { generateImage } from '@/src/lib/imageProviders';
+import { streamChat, generateImage } from '@/src/lib/gemini';
 import { cn } from '@/src/lib/utils';
 import { appendChunk } from '@/src/lib/transcriptUtils';
 import { SoftRevealController } from '@/src/lib/reveal';
@@ -47,11 +46,7 @@ const AVAILABLE_MODELS = [
 const AVAILABLE_VOICES = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Aoede'];
 const AVAILABLE_THEMES = ['indigo', 'rose', 'emerald', 'amber', 'sky'];
 
-export const ChatInterface: React.FC<{ 
-  initialPromptId?: PromptId;
-  onNavigateToIntro?: () => void;
-  onNavigateToJourney?: () => void;
-}> = ({ initialPromptId, onNavigateToIntro, onNavigateToJourney }) => {
+export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initialPromptId }) => {
   const user = auth.currentUser;
   const shouldReduceMotion = useReducedMotion();
   const [chats, setChats] = useState<Chat[]>([]);
@@ -77,8 +72,6 @@ export const ChatInterface: React.FC<{
   const modelTriggerRef = useRef<HTMLButtonElement>(null);
   const voiceTriggerRef = useRef<HTMLButtonElement>(null);
   const themeTriggerRef = useRef<HTMLButtonElement>(null);
-  const currentGenerationId = useRef(0);
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Live audio draft states
   const [liveUserText, setLiveUserText] = useState('');
@@ -240,20 +233,12 @@ export const ChatInterface: React.FC<{
     });
   }, [activeChatId]);
 
-  // Cleanup reveal controller and abort controller
+  // Cleanup reveal controller
   useEffect(() => {
     return () => {
       revealControllerRef.current?.destroy();
-      abortControllerRef.current?.abort();
     };
   }, []);
-
-  // Cancel generation when switching chats
-  useEffect(() => {
-    abortControllerRef.current?.abort();
-    setIsLoading(false);
-    setStreamingMessage(null);
-  }, [activeChatId]);
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -309,9 +294,6 @@ export const ChatInterface: React.FC<{
 
   const handleSend = async (content: string, imageUrl?: string) => {
     if (!user) return;
-    
-    // Disable send if currently loading a response for this chat
-    if (isLoading && activeChatId) return;
 
     let chatId = activeChatId;
     if (!chatId) {
@@ -319,9 +301,6 @@ export const ChatInterface: React.FC<{
     }
 
     if (!chatId) return;
-
-    // Abort previous generation if any
-    abortControllerRef.current?.abort();
 
     // Add user message as finalized immediately
     const userMsgData: any = {
@@ -394,8 +373,7 @@ export const ChatInterface: React.FC<{
 
     history.push({ role: 'user' as const, parts: currentParts });
     
-    const genId = ++currentGenerationId.current;
-    generateAIResponse(chatId, history, genId);
+    generateAIResponse(chatId, history);
   };
 
   const handleUpdateMessage = async (msgId: string, content: string, status: 'draft' | 'finalized') => {
@@ -405,82 +383,12 @@ export const ChatInterface: React.FC<{
   };
 
   const parseReviewerOutput = (text: string) => {
-    let content = text;
-    let imagePrompt: string | undefined = undefined;
-    let imageConstraints: any = undefined;
-    let fallbackUsed = false;
-
-    // 1. Try structured <image_instructions> JSON block
-    const instructionsRegex = /<image_instructions>([\s\S]*?)<\/image_instructions>/i;
-    const instructionsMatch = instructionsRegex.exec(content);
-    
-    if (instructionsMatch) {
-      try {
-        const instructions = JSON.parse(instructionsMatch[1].trim());
-        content = content.replace(instructionsMatch[0], '').trim();
-        
-        if (instructions.should_generate_image && instructions.image_prompt) {
-          imagePrompt = instructions.image_prompt;
-          imageConstraints = instructions.image_constraints;
-          console.log("[Telemetry] Image instructions parsed via structured JSON.");
-        }
-      } catch (e) {
-        console.error("Failed to parse <image_instructions> JSON", e);
-      }
-    }
-
-    // 2. Fallback to <image_prompt> tags if not found or failed
-    if (!imagePrompt) {
-      const tagRegex = /<image_prompt>([\s\S]*?)<\/image_prompt>/i;
-      const tagMatch = tagRegex.exec(content);
-      if (tagMatch) {
-        imagePrompt = tagMatch[1].trim();
-        content = content.replace(tagMatch[0], '').trim();
-        fallbackUsed = true;
-        console.warn("[Telemetry] Fallback path used: <image_prompt> tags.");
-      }
-    }
-
-    // 3. Fallback to legacy "Use this image-generation prompt exactly:" phrasing
-    if (!imagePrompt) {
-      const quoteRegex = /Use this image-generation prompt exactly:\s*\"([\s\S]*?)\"/i;
-      const match = quoteRegex.exec(content);
-      if (match) {
-        imagePrompt = match[1].trim();
-        content = content.replace(match[0], '').trim();
-        fallbackUsed = true;
-        console.warn("[Telemetry] Fallback path used: exact phrase with quotes.");
-      } else {
-        const fallbackRegex = /Use this image-generation prompt exactly:\s*([\s\S]*?)(\n\s*Then|\n\s*$|$)/i;
-        const fb = fallbackRegex.exec(content);
-        if (fb) {
-          imagePrompt = fb[1].trim();
-          content = content.replace(fb[0], '').trim();
-          fallbackUsed = true;
-          console.warn("[Telemetry] Fallback path used: exact phrase fallback.");
-        }
-      }
-    }
-
-    return { 
-      content: content.trim(), 
-      reviewThoughts: '', 
-      imagePrompt,
-      imageConstraints,
-      fallbackUsed
-    };
+    return { content: text.trim(), reviewThoughts: '' };
   };
 
-    const generateAIResponse = async (chatId: string, history: { role: 'user' | 'model', parts: { text: string }[] }[], genId: number) => {
-    const isCurrent = () => genId === currentGenerationId.current;
-    const currentTraceId = crypto.randomUUID();
-    let imageMetadata: any = null;
-    
+    const generateAIResponse = async (chatId: string, history: { role: 'user' | 'model', parts: { text: string }[] }[]) => {
     setIsLoading(true);
     
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
     // Staged Thinking Logic
     const getStagedThinking = (baseLevel: number, stage: number) => {
       const levels = [ThinkingLevel.LOW, ThinkingLevel.MEDIUM, ThinkingLevel.HIGH];
@@ -492,7 +400,7 @@ export const ChatInterface: React.FC<{
     const agent1Thinking = getStagedThinking(sliderValue, 1);
     const agent2Thinking = getStagedThinking(sliderValue, 2);
 
-    // Cleanup previous reveal controller if any
+    // Cleanup previous controller if any
     revealControllerRef.current?.destroy();
     
     // Initialize streaming message with empty content for the final area
@@ -512,15 +420,14 @@ export const ChatInterface: React.FC<{
     
     try {
       // PHASE 1: DRAFTING
-      console.log(`Starting Phase 1: Drafting (ID: ${genId}) with thinking ${agent1Thinking}...`);
+      console.log(`Starting Phase 1: Drafting with thinking ${agent1Thinking}...`);
       let draftContent = '';
       let draftThoughts = '';
       let draftSources: { title: string; url: string }[] = [];
       let generatedImageUrl: string | undefined = undefined;
       
-      const draftStream = streamChat(history, fullSystemInstruction, selectedModel, agent1Thinking, useGrounding, controller.signal, currentTraceId);
+      const draftStream = streamChat(history, fullSystemInstruction, selectedModel, agent1Thinking, useGrounding);
       for await (const chunk of draftStream) {
-        if (!isCurrent()) return;
         if (chunk.type === 'thought') {
           draftThoughts += chunk.content as string;
         } else if (chunk.type === 'text') {
@@ -531,8 +438,6 @@ export const ChatInterface: React.FC<{
         // Update draftContent but keep main content empty during this phase
         setStreamingMessage(prev => prev ? { ...prev, draftContent, draftThoughts, sources: draftSources } : null);
       }
-      
-      if (!isCurrent()) return;
       console.log("Phase 1 Complete. Draft length:", draftContent.length);
 
       let revisedContent = '';
@@ -543,7 +448,7 @@ export const ChatInterface: React.FC<{
         revisedContent = "I'm sorry, I couldn't generate a draft. Please try again.";
       } else {
         // PHASE 2: REVIEWING (Agentic Step)
-        console.log(`Starting Phase 2: Reviewing (ID: ${genId}) with thinking ${agent2Thinking}...`);
+        console.log(`Starting Phase 2: Reviewing with thinking ${agent2Thinking}...`);
         setStreamingMessage(prev => prev ? { ...prev, phase: 'reviewing' } : null);
         
         // Provide text-only history context to the reviewer so it knows the current stage/step
@@ -573,18 +478,14 @@ ${draftContent}
           reviewerInstruction, 
           selectedModel, 
           agent2Thinking, 
-          false,
-          controller.signal,
-          currentTraceId
+          false 
         );
 
         // Initialize reveal controller for the revised content
         const revealPromise = new Promise<void>((resolve) => {
           revealControllerRef.current = new SoftRevealController({
             onUpdate: (visible) => {
-              if (isCurrent()) {
-                setStreamingMessage(prev => prev ? { ...prev, content: visible } : null);
-              }
+              setStreamingMessage(prev => prev ? { ...prev, content: visible } : null);
             },
             onComplete: () => resolve(),
             pacing: {
@@ -600,7 +501,6 @@ ${draftContent}
 
         let fullReviewText = '';
         for await (const chunk of reviewStream) {
-          if (!isCurrent()) return;
           if (chunk.type === 'thought') {
             revisedThoughts += chunk.content as string;
             setStreamingMessage(prev => prev ? { ...prev, reviewThoughts: revisedThoughts } : null);
@@ -609,58 +509,65 @@ ${draftContent}
           }
         }
         
-        if (!isCurrent()) return;
-
-        let { 
-          content: finalContent, 
-          reviewThoughts: scorecard, 
-          imagePrompt: extractedImagePrompt,
-          imageConstraints
-        } = parseReviewerOutput(fullReviewText);
+        let { content: finalContent, reviewThoughts: scorecard } = parseReviewerOutput(fullReviewText);
         
+        let extractedImagePrompt: string | undefined = undefined;
+        
+        // Try tag-based extraction first
+        const tagRegex = /<image_prompt>([\s\S]*?)<\/image_prompt>/i;
+        const tagMatch = tagRegex.exec(finalContent);
+        if (tagMatch) {
+          extractedImagePrompt = tagMatch[1].trim();
+          finalContent = finalContent.replace(tagMatch[0], '').trim();
+        } else {
+          // Fallback to legacy phrases
+          const quoteRegex = /Use this image-generation prompt exactly:\s*\"([\s\S]*?)\"/i;
+          const match = quoteRegex.exec(finalContent);
+          if (match) {
+            extractedImagePrompt = match[1].trim();
+            finalContent = finalContent.replace(match[0], '').trim();
+          } else {
+            const fallbackRegex = /Use this image-generation prompt exactly:\s*([\s\S]*?)(\n\s*Then|\n\s*$|$)/i;
+            const fb = fallbackRegex.exec(finalContent);
+            if (fb) {
+              extractedImagePrompt = fb[1].trim();
+              finalContent = finalContent.replace(fb[0], '').trim();
+            }
+          }
+        }
+
         revisedContent = finalContent;
         
+        // Update reviewThoughts with the scorecard/assessment
         setStreamingMessage(prev => prev ? { 
           ...prev, 
           reviewThoughts: (prev.reviewThoughts ? prev.reviewThoughts + '\n\n' : '') + scorecard 
         } : null);
         
+        // Start revealing the final content
         revealControllerRef.current?.append(finalContent);
         revealControllerRef.current?.finish();
         
+        // Wait for the reveal to catch up
         await revealPromise;
-        if (!isCurrent()) return;
         
         if (!revisedContent) {
           console.warn("Phase 2 returned empty content. Falling back to draft.");
         }
         console.log("Phase 2 Complete. Revised length:", revisedContent.length);
 
+        // Generate image if a prompt was extracted
         if (extractedImagePrompt) {
           console.log("Generating image with prompt:", extractedImagePrompt);
           try {
+            // Update UI to show image generation is happening
             setStreamingMessage(prev => prev ? { ...prev, phase: 'finalizing', content: revisedContent } : null);
-            const imageResult = await generateImage({ 
-              prompt: extractedImagePrompt,
-              quality: sliderValue === 3 ? "high" : "standard",
-              ...imageConstraints
-            }, controller.signal, currentTraceId);
-            
-            if (imageResult) {
-              generatedImageUrl = imageResult.url;
-              imageMetadata = {
-                provider: imageResult.provider || 'unknown',
-                traceId: imageResult.traceId,
-                timestamp: Date.now()
-              };
-            }
+            generatedImageUrl = await generateImage(extractedImagePrompt);
           } catch (e) {
             console.error('Failed to generate image', e);
           }
         }
       }
-
-      if (!isCurrent()) return;
 
       // PHASE 3: SAVE FINALIZED RESPONSE
       console.log("Starting Phase 3: Finalizing...");
@@ -680,23 +587,15 @@ ${draftContent}
         sources: draftSources,
         status: 'finalized',
         timestamp: Date.now(),
-        generationId: genId,
       };
       
       if (generatedImageUrl) modelMsgData.imageUrl = generatedImageUrl;
-      if (imageMetadata) modelMsgData.imageMeta = imageMetadata;
+      
       if (draftThoughts) modelMsgData.draftThoughts = draftThoughts;
       if (revisedThoughts) modelMsgData.reviewThoughts = revisedThoughts;
 
       await addDoc(collection(db, 'chats', chatId, 'messages'), modelMsgData);
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.log(`Generation ${genId} aborted.`);
-        return;
-      }
-
-      if (!isCurrent()) return;
-
       const errMsg = `Error generating response: ${error instanceof Error ? error.message : String(error)}`;
       await addDoc(collection(db, 'chats', chatId, 'messages'), {
         chatId,
@@ -704,26 +603,28 @@ ${draftContent}
         content: errMsg,
         status: 'finalized',
         timestamp: Date.now(),
-        generationId: genId
       });
       console.error("Agentic workflow failed:", error);
     } finally {
-      if (isCurrent()) {
-        setIsLoading(false);
-        setStreamingMessage(null);
-        revealControllerRef.current?.destroy();
-        if (abortControllerRef.current === controller) {
-          abortControllerRef.current = null;
-        }
-      }
+      setIsLoading(false);
+      setStreamingMessage(null);
+      revealControllerRef.current?.destroy();
     }
   };
 
-  const clearChat = async () => {
-    if (!activeChatId) return;
-    const msgs = await getDocs(collection(db, 'chats', activeChatId, 'messages'));
-    for (const d of msgs.docs) {
-      await deleteDoc(d.ref);
+  const deleteChat = async (chatIdToDelete: string) => {
+    if (!user) return;
+    try {
+      const msgs = await getDocs(collection(db, 'chats', chatIdToDelete, 'messages'));
+      for (const d of msgs.docs) {
+        await deleteDoc(d.ref);
+      }
+      await deleteDoc(doc(db, 'chats', chatIdToDelete));
+      if (activeChatId === chatIdToDelete) {
+        setActiveChatId(null);
+      }
+    } catch (err) {
+      console.error("Failed to delete chat:", err);
     }
   };
 
@@ -785,33 +686,32 @@ ${draftContent}
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {/* Navigation Links */}
-          <div className="pb-2 mb-2 border-b border-slate-100 space-y-1">
-            <button
-              onClick={onNavigateToIntro}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-all focus-ring"
-            >
-              <Waves size={18} className="text-indigo-600" /> Bassin Bleu
-            </button>
-            <button
-              onClick={onNavigateToJourney}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-all focus-ring"
-            >
-              <BookOpen size={18} className="text-indigo-600" /> Learning Journey
-            </button>
-          </div>
-
           {chats.map(chat => (
-            <button
-              key={chat.id}
-              onClick={() => setActiveChatId(chat.id)}
+            <div 
+              key={chat.id} 
               className={cn(
-                "w-full text-left px-3 py-2 rounded-lg text-sm transition-all truncate focus-ring",
+                "group flex items-center justify-between w-full text-left rounded-lg text-sm transition-all focus-ring",
                 activeChatId === chat.id ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-600 hover:bg-slate-50"
               )}
             >
-              {chat.title}
-            </button>
+              <button
+                onClick={() => setActiveChatId(chat.id)}
+                className="flex-1 truncate text-left px-3 py-2"
+              >
+                {chat.title}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); deleteChat(chat.id); }}
+                className={cn(
+                  "opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-red-600 transition-all",
+                  activeChatId === chat.id ? "opacity-100 text-indigo-400 hover:text-red-600" : ""
+                )}
+                title="Delete chat"
+                aria-label="Delete chat"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
           ))}
         </div>
         <div className="p-4 border-t border-slate-100">
@@ -889,10 +789,11 @@ ${draftContent}
               <span className="hidden sm:inline">Settings</span>
             </button>
             <button 
-              onClick={clearChat}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors focus-ring"
-              title="Clear chat"
-              aria-label="Clear current chat"
+              onClick={() => activeChatId && deleteChat(activeChatId)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-red-600 transition-colors focus-ring"
+              title="Delete chat"
+              aria-label="Delete current chat"
+              disabled={!activeChatId}
             >
               <Trash2 size={18} />
             </button>
@@ -1302,15 +1203,12 @@ ${draftContent}
                     selectedVoice={selectedVoice}
                     onUpdate={(content, status) => handleUpdateMessage(message.id, content, status)}
                     onRegenerate={() => {
-                      if (isLoading && activeChatId) return;
-                      abortControllerRef.current?.abort();
                       const finalizedMessages = messages.filter(m => m.status === 'finalized');
                       const history = finalizedMessages.map(msg => ({
                         role: msg.role === 'user' ? 'user' as const : 'model' as const,
                         parts: [{ text: msg.content }]
                       }));
-                      const genId = ++currentGenerationId.current;
-                      generateAIResponse(activeChatId!, history, genId);
+                      generateAIResponse(activeChatId!, history);
                     }}
                   />
                 ))}
