@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Mic, MicOff, Loader2, Cpu, Volume2, Palette } from 'lucide-react';
+import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Mic, MicOff, Loader2, Cpu, Volume2, Palette, AlertCircle, X } from 'lucide-react';
 import { ThinkingLevel } from "@google/genai";
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
@@ -109,7 +109,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
   }
   
   const handleUserTranscript = (text: string) => {
-    setLiveUserText(prev => appendChunk(prev, text));
+    setLiveUserText(text);
   };
 
   const handleModelTranscript = (text: string) => {
@@ -119,41 +119,16 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
   const handleTurnComplete = async () => {
     if (!user) return;
     
-    let chatId = activeChatId;
-    const titleText = liveUserText.trim() || liveModelText.trim();
-    if (!chatId && titleText) {
-      chatId = await createNewChat(titleText.slice(0, 30) + (titleText.length > 30 ? '...' : ''));
-    }
-    
-    if (!chatId) return;
-    
-    // Save user message if exists
+    // If we have live user text, send it standardly
     if (liveUserText.trim()) {
-      await addDoc(collection(db, 'chats', chatId, 'messages'), {
-        chatId: chatId,
-        role: 'user',
-        content: liveUserText.trim(),
-        status: 'finalized',
-        timestamp: Date.now() - 1000, // slightly before model
-      });
-    }
-    
-    // Save model message if exists
-    if (liveModelText.trim()) {
-      await addDoc(collection(db, 'chats', chatId, 'messages'), {
-        chatId: chatId,
-        role: 'assistant',
-        content: liveModelText.trim(),
-        status: 'finalized',
-        timestamp: Date.now(),
-      });
+      await handleSend(liveUserText.trim());
     }
     
     setLiveUserText('');
     setLiveModelText('');
   };
 
-  const { isLive, isConnecting, transcript, startLive, stopAudio } = useLiveAudio(
+  const { isLive, isConnecting, transcript, error: liveAudioError, setError: setLiveAudioError, startLive, stopAudio, playTTS } = useLiveAudio(
     fullSystemInstruction,
     handleUserTranscript,
     handleModelTranscript,
@@ -162,10 +137,6 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
   );
 
   const handleStopLive = async () => {
-    // Check for non-empty pending live text
-    if (liveUserText.trim() || liveModelText.trim()) {
-      await handleTurnComplete(); // This writes missing turns and clears state
-    }
     stopAudio();
   };
 
@@ -595,6 +566,13 @@ ${draftContent}
       if (revisedThoughts) modelMsgData.reviewThoughts = revisedThoughts;
 
       await addDoc(collection(db, 'chats', chatId, 'messages'), modelMsgData);
+      
+      // Auto-play the TTS audio
+      const finalOutput = revisedContent || draftContent;
+      if (finalOutput) {
+        // Only speak up to 1000 characters or something to avoid huge cost, or just play it all.
+        playTTS(finalOutput);
+      }
     } catch (error) {
       const errMsg = `Error generating response: ${error instanceof Error ? error.message : String(error)}`;
       await addDoc(collection(db, 'chats', chatId, 'messages'), {
@@ -1289,6 +1267,20 @@ ${draftContent}
         {/* Input Area */}
         <footer aria-label="Message input area" className="border-t border-slate-200 bg-white p-4">
           <div className="mx-auto max-w-3xl">
+            {liveAudioError && (
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl flex items-start gap-3 text-sm">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  {liveAudioError}
+                </div>
+                <button 
+                  onClick={() => setLiveAudioError(null)}
+                  className="text-red-500 hover:text-red-700 p-1 rounded-md"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            )}
             <ChatInput onSend={handleSend} disabled={isLoading} />
             <p className="mt-2 text-center text-[10px] text-slate-400 uppercase tracking-widest">
               {streamingMessage?.phase === 'drafting' 
