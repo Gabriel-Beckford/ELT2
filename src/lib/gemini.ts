@@ -1,9 +1,7 @@
 import { GoogleGenAI, Modality, ThinkingLevel } from "@google/genai";
 
 export const ai = new GoogleGenAI({ 
-  // Client-side code should use backend endpoints instead of exposing the API key directly.
-  // The key is removed here to satisfy "backend runtime only" requirements.
-  apiKey: ''
+  apiKey: process.env.GEMINI_API_KEY
 });
 
 export async function generateImage(prompt: string): Promise<string | undefined> {
@@ -61,7 +59,7 @@ export async function* streamChat(
       contents: messages,
       tools,
       config: {
-        systemInstruction: systemInstruction || "You are Aura, a helpful and friendly AI assistant. Your responses should be clear, concise, and formatted using Markdown when appropriate. Maintain a professional yet approachable tone.",
+        systemInstruction: systemInstruction || "You are Aura, a helpful and friendly AI assistant.",
         thinkingConfig: thinkingLevel ? { includeThoughts: true, thinkingLevel } : undefined,
         includeServerSideToolInvocations: useGrounding ? true : undefined,
         temperature: 0.7,
@@ -72,19 +70,15 @@ export async function* streamChat(
 
     for await (const chunk of stream) {
       // Handle grounding metadata (search results)
-      const groundingMetadata = chunk.candidates?.[0]?.groundingMetadata;
-      if (groundingMetadata?.searchEntryPoint?.renderedContent) {
-        // This is the Google Search chip/entry point
-      }
-      
+      const groundingMetadata = chunk.candidates?.[0]?.groundingMetadata as any;
       if (groundingMetadata?.groundingChunks) {
         const sources = groundingMetadata.groundingChunks
-          .filter(c => c.web)
-          .map(c => ({
+          .filter((c: any) => c.web)
+          .map((c: any) => ({
             title: c.web?.title || 'Untitled Source',
             url: c.web?.uri || ''
           }))
-          .filter(s => s.url);
+          .filter((s: any) => s.url);
         
         if (sources.length > 0) {
           yield { type: 'sources', content: sources };

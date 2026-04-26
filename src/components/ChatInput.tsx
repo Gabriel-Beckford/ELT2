@@ -1,7 +1,14 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, ArrowUp, Image as ImageIcon, X } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Send, ArrowUp, Image as ImageIcon, X, Mic, MicOff, AlertCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PexelsMenu } from './PexelsMenu';
+
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
 
 interface ChatInputProps {
   onSend: (message: string, imageUrl?: string) => void;
@@ -12,15 +19,93 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, disabled }) => {
   const [input, setInput] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isPexelsOpen, setIsPexelsOpen] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptError, setTranscriptError] = useState<string | null>(null);
+  
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pexelsTriggerRef = useRef<HTMLButtonElement>(null);
+  const recognitionRef = useRef<any>(null);
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = useCallback((e?: React.FormEvent, forceInput?: string) => {
     e?.preventDefault();
-    if ((input.trim() || selectedImage) && !disabled) {
-      onSend(input.trim(), selectedImage || undefined);
+    const textToSend = forceInput ?? input.trim();
+    if ((textToSend || selectedImage) && !disabled) {
+      onSend(textToSend, selectedImage || undefined);
       setInput('');
       setSelectedImage(null);
+    }
+  }, [input, selectedImage, disabled, onSend]);
+
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setIsTranscribing(false);
+        setTranscriptError(null);
+      };
+
+      recognition.onspeechend = () => {
+        setIsListening(false);
+        setIsTranscribing(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInput((prev) => {
+          const newVal = prev ? prev + ' ' + transcript : transcript;
+          return newVal;
+        });
+        setIsTranscribing(false);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        if (event.error !== 'no-speech') {
+          setTranscriptError('Failed to transcribe audio.');
+        }
+        setIsListening(false);
+        setIsTranscribing(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+        setIsTranscribing(false);
+      };
+
+      recognitionRef.current = recognition;
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
+
+  const toggleListening = () => {
+    if (disabled) return;
+    
+    if (!recognitionRef.current) {
+      setTranscriptError("Speech recognition not supported in this browser.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      try {
+        setTranscriptError(null);
+        recognitionRef.current.start();
+      } catch (err) {
+        console.error("Failed to start recognition", err);
+      }
     }
   };
 
@@ -99,17 +184,34 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, disabled }) => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Message Refleksyon..."
-          disabled={disabled}
+          placeholder={isListening ? "Listening..." : isTranscribing ? "Transcribing..." : "Message Refleksyon..."}
+          disabled={disabled || isListening || isTranscribing}
           className="flex-1 bg-transparent px-3 py-2 text-sm outline-none resize-none max-h-[200px] min-h-[40px] focus-ring"
         />
         
         <button
-          type="submit"
-          disabled={(!input.trim() && !selectedImage) || disabled}
+          type="button"
+          onClick={toggleListening}
+          disabled={disabled || isTranscribing}
           className={cn(
             "flex h-9 w-9 items-center justify-center rounded-xl transition-all shrink-0 focus-ring",
-            (input.trim() || selectedImage) && !disabled 
+            isListening 
+              ? "bg-red-100 text-red-600 animate-pulse" 
+              : "text-slate-400 hover:bg-slate-100 hover:text-slate-600",
+            (disabled || isTranscribing) && "opacity-50 cursor-not-allowed"
+          )}
+          title={isListening ? "Stop listening" : "Start dictation"}
+          aria-label={isListening ? "Stop listening" : "Start dictation"}
+        >
+          {isListening ? <MicOff size={18} /> : isTranscribing ? <Loader2 size={18} className="animate-spin text-indigo-500" /> : <Mic size={18} />}
+        </button>
+
+        <button
+          type="submit"
+          disabled={(!input.trim() && !selectedImage) || disabled || isListening || isTranscribing}
+          className={cn(
+            "flex h-9 w-9 items-center justify-center rounded-xl transition-all shrink-0 focus-ring",
+            (input.trim() || selectedImage) && !disabled && !isListening && !isTranscribing
               ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md" 
               : "bg-slate-100 text-slate-400 cursor-not-allowed"
           )}
@@ -118,6 +220,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, disabled }) => {
           <ArrowUp size={18} />
         </button>
       </form>
+      
+      {transcriptError && (
+        <div className="absolute -bottom-6 left-2 flex items-center gap-1 text-xs text-red-500">
+          <AlertCircle size={12} />
+          {transcriptError}
+        </div>
+      )}
     </div>
   );
 };

@@ -44,6 +44,12 @@ export interface Chat {
   useGrounding?: boolean;
   selectedModel?: string;
   selectedTheme?: string;
+  voiceEnabled?: boolean;
+  autoReadResponses?: boolean;
+  ttsVoiceName?: string;
+  ttsRate?: number;
+  ttsPitch?: number;
+  sttMode?: 'browser' | 'server';
   createdAt: number;
   updatedAt: number;
 }

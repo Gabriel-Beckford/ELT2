@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Loader2, Cpu, Palette } from 'lucide-react';
+import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Loader2, Cpu, Palette, Volume2, VolumeX } from 'lucide-react';
 import { ThinkingLevel } from "@google/genai";
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
@@ -11,6 +11,7 @@ import { cn } from '@/src/lib/utils';
 import { SoftRevealController } from '@/src/lib/reveal';
 import { SYSTEM_PROMPTS, PromptId } from '@/src/constants/prompts';
 import { LEARNING_FACILITATOR_REVIEWER } from '@/src/constants/reviewers';
+import { getElevenLabsAudio } from '@/src/lib/elevenlabs';
 import { auth, db, logOut } from '@/src/lib/firebase';
 import { 
   collection, 
@@ -50,17 +51,92 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedPromptId] = useState<PromptId>('facilitator');
-  const [sliderValue, setSliderValue] = useState(3); // Default to Balanced
+  const [selectedPromptId, setSelectedPromptId] = useState<PromptId>(initialPromptId || 'facilitator');
+  const [sliderValue, setSliderValue] = useState(2); // Default to Balanced
   const [useGrounding, setUseGrounding] = useState(true);
   const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'mode' | 'memory'>('mode');
-  const [selectedModel, setSelectedModel] = useState('gemini-3.1-pro-preview');
+  const [selectedModel, setSelectedModel] = useState('gemini-3-flash-preview');
   const [selectedTheme, setSelectedTheme] = useState('indigo');
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [autoReadResponses, setAutoReadResponses] = useState(true);
+  const [ttsVoiceName, setTtsVoiceName] = useState('21m00Tcm4TlvDq8ikWAM'); // Default to Rachel if Cloud
+  const [ttsRate, setTtsRate] = useState(1);
+  const [ttsPitch, setTtsPitch] = useState(1);
+  const [sttMode, setSttMode] = useState<'browser' | 'server'>('browser');
+  
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const stopSpeaking = () => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  };
+
+  const speak = async (text: string) => {
+    if (!autoReadResponses) return;
+    stopSpeaking();
+    
+    // Clean up markdown before speaking
+    const cleanText = text.replace(/[*_#`~>]/g, '');
+    
+    if (sttMode === 'server') {
+      try {
+        const resp = await fetch('/api/elevenlabs/prepare', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({ text: cleanText, voiceId: ttsVoiceName || '21m00Tcm4TlvDq8ikWAM' })
+        });
+        if (resp.ok) {
+           const { id } = await resp.json();
+           const audioUrl = `/api/elevenlabs/stream/${id}`;
+           if (!audioRef.current) {
+              audioRef.current = new Audio(audioUrl);
+           } else {
+              audioRef.current.src = audioUrl;
+           }
+           audioRef.current.play().catch(e => console.error("Audio playback error:", e));
+           return;
+        }
+      } catch (err) {
+        console.error('TTS error', err);
+      }
+      
+      // If server route fails, fall back to browser native
+      console.warn("ElevenLabs TTS failed. Falling back to browser TTS.");
+    }
+    
+    if (!window.speechSynthesis) return;
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    
+    if (sttMode === 'browser' && ttsVoiceName) {
+      const voices = window.speechSynthesis.getVoices();
+      const voice = voices.find(v => v.name === ttsVoiceName) || voices.find(v => v.default);
+      if (voice) {
+        utterance.voice = voice;
+      }
+    }
+    
+    utterance.rate = ttsRate;
+    utterance.pitch = ttsPitch;
+    
+    window.speechSynthesis.speak(utterance);
+  };
+
+  useEffect(() => {
+    return () => {
+      stopSpeaking();
+    };
+  }, []);
+  
   const scrollRef = useRef<HTMLDivElement>(null);
   const revealControllerRef = useRef<SoftRevealController | null>(null);
   const settingsTriggerRef = useRef<HTMLButtonElement>(null);
@@ -132,9 +208,16 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     const activeChat = chats.find(c => c.id === activeChatId);
     if (activeChat) {
       if (activeChat.sliderValue) setSliderValue(activeChat.sliderValue);
+      if (activeChat.selectedPromptId) setSelectedPromptId(activeChat.selectedPromptId as PromptId);
       if (activeChat.useGrounding !== undefined) setUseGrounding(activeChat.useGrounding);
       if (activeChat.selectedModel) setSelectedModel(activeChat.selectedModel);
       if (activeChat.selectedTheme) setSelectedTheme(activeChat.selectedTheme);
+      if (activeChat.voiceEnabled !== undefined) setVoiceEnabled(activeChat.voiceEnabled);
+      if (activeChat.autoReadResponses !== undefined) setAutoReadResponses(activeChat.autoReadResponses);
+      if (activeChat.ttsVoiceName) setTtsVoiceName(activeChat.ttsVoiceName);
+      if (activeChat.ttsRate !== undefined) setTtsRate(activeChat.ttsRate);
+      if (activeChat.ttsPitch !== undefined) setTtsPitch(activeChat.ttsPitch);
+      if (activeChat.sttMode) setSttMode(activeChat.sttMode);
     }
     const q = query(
       collection(db, 'chats', activeChatId, 'messages'),
@@ -193,6 +276,12 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       useGrounding,
       selectedModel,
       selectedTheme,
+      voiceEnabled,
+      autoReadResponses,
+      ttsVoiceName,
+      ttsRate,
+      ttsPitch,
+      sttMode,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -203,6 +292,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
 
   const handleSend = async (content: string, imageUrl?: string) => {
     if (!user) return;
+    stopSpeaking();
 
     let chatId = activeChatId;
     if (!chatId) {
@@ -345,6 +435,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       if (!draftContent) {
         console.warn("Phase 1 returned no content. Skipping Phase 2.");
         revisedContent = "I'm sorry, I couldn't generate a draft. Please try again.";
+        speak(revisedContent);
       } else {
         // PHASE 2: REVIEWING (Agentic Step)
         console.log(`Starting Phase 2: Reviewing with thinking ${agent2Thinking}...`);
@@ -442,6 +533,9 @@ ${draftContent}
           ...prev, 
           reviewThoughts: (prev.reviewThoughts ? prev.reviewThoughts + '\n\n' : '') + scorecard 
         } : null);
+        
+        // Start speaking immediately before waiting for the reveal or image generation
+        speak(revisedContent);
         
         // Start revealing the final content
         revealControllerRef.current?.append(finalContent);
@@ -640,6 +734,26 @@ ${draftContent}
             <h1 className="text-lg font-semibold tracking-tight">Refleksyon Chat</h1>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const newVal = !autoReadResponses;
+                setAutoReadResponses(newVal);
+                if (newVal) stopSpeaking();
+                if (activeChatId) {
+                  updateDoc(doc(db, 'chats', activeChatId), { autoReadResponses: newVal });
+                }
+              }}
+              className={cn(
+                "flex h-9 px-3 items-center gap-2 rounded-lg text-sm font-medium transition-colors focus-ring",
+                autoReadResponses ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100" : "bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+              )}
+              title={autoReadResponses ? "Disable Text-to-Speech" : "Enable Text-to-Speech"}
+              aria-label={autoReadResponses ? "Disable Text-to-Speech" : "Enable Text-to-Speech"}
+              aria-pressed={autoReadResponses}
+            >
+              {autoReadResponses ? <Volume2 size={18} /> : <VolumeX size={18} />}
+              <span className="hidden sm:inline">{autoReadResponses ? 'Voice On' : 'Voice Off'}</span>
+            </button>
             <button 
               ref={settingsTriggerRef}
               onClick={() => setIsSystemPromptOpen(!isSystemPromptOpen)}
@@ -714,6 +828,28 @@ ${draftContent}
 
                 {settingsTab === 'mode' ? (
                   <div id="panel-ai" role="tabpanel" aria-labelledby="tab-ai" className="space-y-4">
+                    <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+                      <div className="flex items-center gap-2">
+                        <BookOpen size={16} className="text-slate-500" />
+                        <h3 className="text-sm font-semibold text-slate-700">Learning Pathway</h3>
+                      </div>
+                      <select
+                        value={selectedPromptId}
+                        onChange={(e) => {
+                          const newPromptId = e.target.value as PromptId;
+                          setSelectedPromptId(newPromptId);
+                          if (activeChatId) {
+                            updateDoc(doc(db, 'chats', activeChatId), { selectedPromptId: newPromptId });
+                          }
+                        }}
+                        className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium focus-ring"
+                      >
+                        {Object.values(SYSTEM_PROMPTS).map(prompt => (
+                          <option key={prompt.id} value={prompt.id}>{prompt.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
                     <div className="flex items-center justify-between pb-4 border-b border-slate-200">
                         <div className="flex items-center gap-2">
                           <Bot size={16} className="text-slate-500" />
@@ -918,6 +1054,99 @@ ${draftContent}
                         <p className="mt-4 text-[10px] text-indigo-700/60 leading-relaxed italic">
                           Staged Thinking: Agent 1 (Drafting) uses full effort, while subsequent agents use progressively less to optimize speed.
                         </p>
+                      </div>
+
+                      <div className="pt-4 border-t border-slate-200 space-y-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Volume2 size={16} className="text-slate-500" />
+                          <h3 className="text-sm font-semibold text-slate-700">Voice Settings</h3>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <label htmlFor="stt-mode" className="text-sm font-semibold text-slate-700">Speech Engine</label>
+                          <select
+                            id="stt-mode"
+                            value={sttMode}
+                            onChange={(e) => {
+                              const val = e.target.value as 'browser' | 'server';
+                              setSttMode(val);
+                              if (activeChatId) {
+                                updateDoc(doc(db, 'chats', activeChatId), { sttMode: val });
+                              }
+                            }}
+                            className="text-sm bg-slate-50 border border-slate-300 rounded-md px-2 py-1 focus-ring"
+                          >
+                            <option value="browser">Browser Native</option>
+                            <option value="server">Cloud AI (ElevenLabs)</option>
+                          </select>
+                        </div>
+                        
+                        {sttMode === 'server' && (
+                          <div className="flex items-center justify-between">
+                            <label htmlFor="elevenlabs-voice" className="text-sm font-semibold text-slate-700">ElevenLabs Voice</label>
+                            <select
+                              id="elevenlabs-voice"
+                              value={ttsVoiceName}
+                              onChange={(e) => {
+                                setTtsVoiceName(e.target.value);
+                                if (activeChatId) {
+                                  updateDoc(doc(db, 'chats', activeChatId), { ttsVoiceName: e.target.value });
+                                }
+                              }}
+                              className="text-sm bg-slate-50 border border-slate-300 rounded-md px-2 py-1 focus-ring"
+                            >
+                              <option value="21m00Tcm4TlvDq8ikWAM">Rachel</option>
+                              <option value="29vD33N1CtxCmqQRPOHJ">Drew</option>
+                              <option value="2EiwWnXFnvU5JabPnv8n">Clyde</option>
+                              <option value="zrHiDhphv9ZnVXBqCLjz">Mimi</option>
+                              <option value="EXAVITQu4vr4xnSDxMaL">Bella</option>
+                              <option value="cjVigY5qzO86Huf0OWal">Eric</option>
+                              <option value="pNInz6obpgDQGcFmaJgB">Adam</option>
+                            </select>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center justify-between">
+                          <label htmlFor="tts-rate" className="text-sm font-semibold text-slate-700">Speech Rate</label>
+                          <input
+                            id="tts-rate"
+                            type="range"
+                            min="0.5"
+                            max="2"
+                            step="0.1"
+                            value={ttsRate}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              setTtsRate(val);
+                              if (activeChatId) {
+                                updateDoc(doc(db, 'chats', activeChatId), { ttsRate: val });
+                              }
+                            }}
+                            className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus-ring"
+                          />
+                          <span className="text-xs text-slate-500 w-8">{ttsRate}x</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <label htmlFor="tts-pitch" className="text-sm font-semibold text-slate-700">Speech Pitch</label>
+                          <input
+                            id="tts-pitch"
+                            type="range"
+                            min="0.5"
+                            max="2"
+                            step="0.1"
+                            value={ttsPitch}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              setTtsPitch(val);
+                              if (activeChatId) {
+                                updateDoc(doc(db, 'chats', activeChatId), { ttsPitch: val });
+                              }
+                            }}
+                            className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus-ring"
+                          />
+                          <span className="text-xs text-slate-500 w-8">{ttsPitch}x</span>
+                        </div>
                       </div>
 
                       <div className="pt-4 border-t border-slate-200">
