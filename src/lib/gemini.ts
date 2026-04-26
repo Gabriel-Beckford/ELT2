@@ -1,7 +1,9 @@
 import { GoogleGenAI, Modality, ThinkingLevel } from "@google/genai";
 
 export const ai = new GoogleGenAI({ 
-  apiKey: process.env.GEMINI_API_KEY || '' 
+  // Client-side code should use backend endpoints instead of exposing the API key directly.
+  // The key is removed here to satisfy "backend runtime only" requirements.
+  apiKey: ''
 });
 
 export async function generateImage(prompt: string): Promise<string | undefined> {
