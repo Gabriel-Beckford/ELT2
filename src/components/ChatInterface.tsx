@@ -89,29 +89,21 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     const cleanText = text.replace(/[*_#`~>]/g, '');
     
     if (sttMode === 'server') {
-      try {
-        const resp = await fetch('/api/elevenlabs/prepare', {
-           method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ text: cleanText, voiceId: ttsVoiceName || '21m00Tcm4TlvDq8ikWAM' })
-        });
-        if (resp.ok) {
-           const { id } = await resp.json();
-           const audioUrl = `/api/elevenlabs/stream/${id}`;
-           if (!audioRef.current) {
-              audioRef.current = new Audio(audioUrl);
-           } else {
-              audioRef.current.src = audioUrl;
-           }
-           audioRef.current.play().catch(e => console.error("Audio playback error:", e));
-           return;
+      const elevenKey = process.env.ELEVENLABS_API_KEY || import.meta.env.VITE_ELEVENLABS_API_KEY;
+      if (elevenKey) {
+        const audioUrl = await getElevenLabsAudio(cleanText, ttsVoiceName || '21m00Tcm4TlvDq8ikWAM', elevenKey);
+        if (audioUrl) {
+          if (!audioRef.current) {
+            audioRef.current = new Audio(audioUrl);
+          } else {
+            audioRef.current.src = audioUrl;
+          }
+          audioRef.current.play().catch(e => console.error("Audio playback error:", e));
         }
-      } catch (err) {
-        console.error('TTS error', err);
+        return;
       }
-      
-      // If server route fails, fall back to browser native
-      console.warn("ElevenLabs TTS failed. Falling back to browser TTS.");
+      // If no key, fall back to browser native
+      console.warn("No ElevenLabs API Key found. Falling back to browser TTS.");
     }
     
     if (!window.speechSynthesis) return;

@@ -7,14 +7,13 @@ import multer from "multer";
 import { GoogleGenAI } from "@google/genai";
 
 // Load environment early
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
 if (!GEMINI_API_KEY) {
-  console.error("FATAL ERROR: GEMINI_API_KEY environment variables are missing.");
-  process.exit(1);
+  console.warn("WARNING: GEMINI_API_KEY environment variable is missing. LLM features may fail.");
 }
 
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY || "dummy-key" });
 const ttsBuffers = new Map<string, { text: string, voiceId: string }>();
 
 const __filename = fileURLToPath(import.meta.url);
