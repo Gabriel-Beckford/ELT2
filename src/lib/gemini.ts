@@ -42,28 +42,6 @@ export async function generateImage(prompt: string): Promise<string | undefined>
   }
   return undefined;
 }
-export async function generateSpeech(text: string, voice: string = 'Kore') {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text }] }],
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: voice },
-          },
-        },
-      },
-    });
-
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    return base64Audio;
-  } catch (error) {
-    console.error("Gemini TTS Error:", error);
-    throw error;
-  }
-}
 
 export async function* streamChat(
   messages: { role: 'user' | 'model', parts: { text: string }[] }[],

@@ -1,23 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { motion, useReducedMotion } from 'motion/react';
-import { User, Bot, Volume2, Loader2, Edit2, Check, X, RotateCcw, ChevronDown, ChevronRight, ExternalLink, Globe, Cpu, Sparkles } from 'lucide-react';
+import { User, Bot, Loader2, Edit2, Check, X, RotateCcw, ChevronDown, ChevronRight, ExternalLink, Globe, Cpu, Sparkles } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { Message } from '@/src/types';
-import { generateSpeech } from '@/src/lib/gemini';
-import { playAudioFromBase64 } from '@/src/lib/audio';
 
 interface ChatMessageProps {
   message: Message;
   onUpdate?: (content: string, status: 'draft' | 'finalized') => void;
   onRegenerate?: () => void;
-  selectedVoice?: string;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onRegenerate, selectedVoice = 'Kore' }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onRegenerate }) => {
   const isUser = message.role === 'user';
   const shouldReduceMotion = useReducedMotion();
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [showThoughts, setShowThoughts] = useState(false);
@@ -25,22 +21,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onR
   useEffect(() => {
     setEditContent(message.content);
   }, [message.content]);
-
-  const handleSpeak = async () => {
-    if (isSpeaking) return;
-    
-    setIsSpeaking(true);
-    try {
-      const base64Audio = await generateSpeech(message.content, selectedVoice);
-      if (base64Audio) {
-        await playAudioFromBase64(base64Audio);
-      }
-    } catch (error) {
-      console.error("Failed to play audio:", error);
-    } finally {
-      setIsSpeaking(false);
-    }
-  };
 
   const handleSave = () => {
     onUpdate?.(editContent, 'finalized');
@@ -85,20 +65,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onR
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all">
             {!isEditing && (
               <>
-                {!isUser && message.content && (
-                  <button
-                    onClick={handleSpeak}
-                    disabled={isSpeaking}
-                    className={cn(
-                      "flex h-7 w-7 items-center justify-center rounded-md transition-all outline-none focus:ring-2 focus:ring-indigo-500/50 focus:bg-slate-200 focus:text-slate-600",
-                      isSpeaking ? "bg-indigo-100 text-indigo-600 opacity-100" : "text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-                    )}
-                    title="Listen to message"
-                    aria-label="Listen to message"
-                  >
-                    {isSpeaking ? <Loader2 size={14} className="animate-spin" /> : <Volume2 size={14} />}
-                  </button>
-                )}
                 <button
                   onClick={() => setIsEditing(true)}
                   className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200 hover:text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/50 focus:bg-slate-200 focus:text-slate-600"

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Mic, MicOff, Loader2, Cpu, Volume2, Palette } from 'lucide-react';
+import { Sparkles, Trash2, Github, Bot, Settings, ChevronDown, ChevronUp, BookOpen, MessageSquare, LogOut, Plus, Loader2, Cpu, Palette } from 'lucide-react';
 import { ThinkingLevel } from "@google/genai";
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
@@ -8,12 +8,10 @@ import { MemorySettings } from './MemorySettings';
 import { Message, Chat, UserProfile } from '@/src/types';
 import { streamChat, generateImage } from '@/src/lib/gemini';
 import { cn } from '@/src/lib/utils';
-import { appendChunk } from '@/src/lib/transcriptUtils';
 import { SoftRevealController } from '@/src/lib/reveal';
 import { SYSTEM_PROMPTS, PromptId } from '@/src/constants/prompts';
 import { LEARNING_FACILITATOR_REVIEWER } from '@/src/constants/reviewers';
 import { auth, db, logOut } from '@/src/lib/firebase';
-import { useLiveAudio } from '@/src/hooks/useLiveAudio';
 import { 
   collection, 
   addDoc, 
@@ -43,7 +41,6 @@ const AVAILABLE_MODELS = [
   { id: 'gemini-flash-latest', name: 'Gemini Flash', isPreview: false },
 ];
 
-const AVAILABLE_VOICES = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Aoede'];
 const AVAILABLE_THEMES = ['indigo', 'rose', 'emerald', 'amber', 'sky'];
 
 export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initialPromptId }) => {
@@ -59,10 +56,8 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
   const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'mode' | 'memory'>('mode');
   const [selectedModel, setSelectedModel] = useState('gemini-3.1-pro-preview');
-  const [selectedVoice, setSelectedVoice] = useState('Kore');
   const [selectedTheme, setSelectedTheme] = useState('indigo');
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
-  const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -70,12 +65,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
   const revealControllerRef = useRef<SoftRevealController | null>(null);
   const settingsTriggerRef = useRef<HTMLButtonElement>(null);
   const modelTriggerRef = useRef<HTMLButtonElement>(null);
-  const voiceTriggerRef = useRef<HTMLButtonElement>(null);
   const themeTriggerRef = useRef<HTMLButtonElement>(null);
-
-  // Live audio draft states
-  const [liveUserText, setLiveUserText] = useState('');
-  const [liveModelText, setLiveModelText] = useState('');
 
   // Streaming state for text chat
   const [streamingMessage, setStreamingMessage] = useState<{
@@ -108,82 +98,6 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     );
   }
   
-  const handleUserTranscript = (text: string) => {
-    setLiveUserText(prev => appendChunk(prev, text));
-  };
-
-  const handleModelTranscript = (text: string) => {
-    setLiveModelText(prev => appendChunk(prev, text));
-  };
-
-  const handleTurnComplete = async () => {
-    if (!user) return;
-    
-    let chatId = activeChatId;
-    const titleText = liveUserText.trim() || liveModelText.trim();
-    if (!chatId && titleText) {
-      chatId = await createNewChat(titleText.slice(0, 30) + (titleText.length > 30 ? '...' : ''));
-    }
-    
-    if (!chatId) return;
-    
-    // Save user message if exists
-    if (liveUserText.trim()) {
-      await addDoc(collection(db, 'chats', chatId, 'messages'), {
-        chatId: chatId,
-        role: 'user',
-        content: liveUserText.trim(),
-        status: 'finalized',
-        timestamp: Date.now() - 1000, // slightly before model
-      });
-    }
-    
-    // Save model message if exists
-    if (liveModelText.trim()) {
-      await addDoc(collection(db, 'chats', chatId, 'messages'), {
-        chatId: chatId,
-        role: 'assistant',
-        content: liveModelText.trim(),
-        status: 'finalized',
-        timestamp: Date.now(),
-      });
-    }
-    
-    setLiveUserText('');
-    setLiveModelText('');
-  };
-
-  const { isLive, isConnecting, transcript, startLive, stopAudio } = useLiveAudio(
-    fullSystemInstruction,
-    handleUserTranscript,
-    handleModelTranscript,
-    handleTurnComplete,
-    selectedVoice
-  );
-
-  const handleStopLive = async () => {
-    // Check for non-empty pending live text
-    if (liveUserText.trim() || liveModelText.trim()) {
-      await handleTurnComplete(); // This writes missing turns and clears state
-    }
-    stopAudio();
-  };
-
-  const handleStartLive = () => {
-    let initialHistory: any[] = [];
-    if (activeChatId) {
-      // Build a lightweight history payload from current messages (finalized user/assistant turns only)
-      // Cap history size to the last 20 turns
-      const finalizedMessages = messages.filter(m => m.status === 'finalized');
-      const recentMessages = finalizedMessages.slice(-20);
-      initialHistory = recentMessages.map(msg => ({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }]
-      }));
-    }
-    startLive(initialHistory);
-  };
-
   // Fetch user profile
   useEffect(() => {
     if (!user) return;
@@ -220,7 +134,6 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       if (activeChat.sliderValue) setSliderValue(activeChat.sliderValue);
       if (activeChat.useGrounding !== undefined) setUseGrounding(activeChat.useGrounding);
       if (activeChat.selectedModel) setSelectedModel(activeChat.selectedModel);
-      if (activeChat.selectedVoice) setSelectedVoice(activeChat.selectedVoice);
       if (activeChat.selectedTheme) setSelectedTheme(activeChat.selectedTheme);
     }
     const q = query(
@@ -247,9 +160,6 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
         if (isModelMenuOpen) {
           setIsModelMenuOpen(false);
           modelTriggerRef.current?.focus();
-        } else if (isVoiceMenuOpen) {
-          setIsVoiceMenuOpen(false);
-          voiceTriggerRef.current?.focus();
         } else if (isThemeMenuOpen) {
           setIsThemeMenuOpen(false);
           themeTriggerRef.current?.focus();
@@ -261,7 +171,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [isModelMenuOpen, isVoiceMenuOpen, isThemeMenuOpen, isSystemPromptOpen]);
+  }, [isModelMenuOpen, isThemeMenuOpen, isSystemPromptOpen]);
 
   const scrollToBottom = () => {
     if (scrollRef.current) {
@@ -282,7 +192,6 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       sliderValue,
       useGrounding,
       selectedModel,
-      selectedVoice,
       selectedTheme,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -320,15 +229,6 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
 
     // Trigger AI response in background
     const finalizedMessages = messages.filter(m => m.status === 'finalized');
-    
-    // Safety net: include any pending non-empty live text in history
-    const historyParts: any[] = [];
-    if (liveUserText.trim()) {
-      historyParts.push({ role: 'user' as const, parts: [{ text: liveUserText.trim() }] });
-    }
-    if (liveModelText.trim()) {
-      historyParts.push({ role: 'model' as const, parts: [{ text: liveModelText.trim() }] });
-    }
 
     const history = [
       ...finalizedMessages.map(msg => {
@@ -339,8 +239,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
           role: msg.role === 'user' ? 'user' as const : 'model' as const,
           parts
         };
-      }),
-      ...historyParts
+      })
     ];
 
     const currentParts: any[] = [{ text: content || "Here is an image." }];
@@ -668,10 +567,10 @@ ${draftContent}
   };
 
   useEffect(() => {
-    if (!isModelMenuOpen && !isVoiceMenuOpen && !isThemeMenuOpen) {
+    if (!isModelMenuOpen && !isThemeMenuOpen) {
       setFocusedIndex(-1);
     }
-  }, [isModelMenuOpen, isVoiceMenuOpen, isThemeMenuOpen]);
+  }, [isModelMenuOpen, isThemeMenuOpen]);
 
   return (
     <div className={cn("flex h-screen w-full bg-slate-50 font-sans text-slate-900 overflow-hidden", `theme-${selectedTheme}`)}>
@@ -741,37 +640,6 @@ ${draftContent}
             <h1 className="text-lg font-semibold tracking-tight">Refleksyon Chat</h1>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={isLive ? handleStopLive : handleStartLive}
-              disabled={isConnecting}
-              className={cn(
-                "flex h-9 px-3 items-center gap-2 rounded-lg text-sm font-medium transition-all shadow-sm focus-ring",
-                isLive 
-                  ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100" 
-                  : "bg-indigo-600 text-white hover:bg-indigo-700",
-                isConnecting && "opacity-70 cursor-not-allowed"
-              )}
-              title="Live Audio"
-              aria-label={isLive ? "Stop live audio" : "Start live audio"}
-              aria-pressed={isLive}
-            >
-              {isConnecting ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : isLive ? (
-                <MicOff size={16} />
-              ) : (
-                <Mic size={16} />
-              )}
-              <span className="hidden sm:inline">
-                {isConnecting ? "Connecting..." : isLive ? "Stop Live" : "Live Audio"}
-              </span>
-              {isLive && (
-                <span className="relative flex h-2 w-2 ml-1">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                </span>
-              )}
-            </button>
             <button 
               ref={settingsTriggerRef}
               onClick={() => setIsSystemPromptOpen(!isSystemPromptOpen)}
@@ -910,75 +778,6 @@ ${draftContent}
                                     {model.isPreview && (
                                       <span className="text-[9px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">Preview</span>
                                     )}
-                                  </button>
-                                ))}
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-                        <div className="flex items-center gap-2">
-                          <Volume2 size={16} className="text-slate-500" />
-                          <h3 className="text-sm font-semibold text-slate-700">Voice Selection</h3>
-                        </div>
-                        <div className="relative">
-                          <button
-                            ref={voiceTriggerRef}
-                            id="voice-trigger"
-                            onClick={() => setIsVoiceMenuOpen(!isVoiceMenuOpen)}
-                            onKeyDown={(e) => handleMenuTriggerKeyDown(e, isVoiceMenuOpen, setIsVoiceMenuOpen)}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium focus-ring"
-                            aria-haspopup="listbox"
-                            aria-expanded={isVoiceMenuOpen}
-                            aria-controls="voice-list"
-                            aria-activedescendant={focusedIndex >= 0 && isVoiceMenuOpen ? `voice-option-${focusedIndex}` : undefined}
-                            aria-label={isVoiceMenuOpen ? "Close voice menu" : "Open voice menu"}
-                          >
-                            {selectedVoice}
-                            <ChevronDown size={14} className={cn("text-slate-400 transition-transform", isVoiceMenuOpen && "rotate-180")} />
-                          </button>
-                          
-                          <AnimatePresence>
-                            {isVoiceMenuOpen && (
-                              <motion.div
-                                id="voice-list"
-                                role="listbox"
-                                aria-labelledby="voice-trigger"
-                                onKeyDown={(e) => handleMenuKeyDown(e, AVAILABLE_VOICES.length, (idx) => {
-                                  const voice = AVAILABLE_VOICES[idx];
-                                  setSelectedVoice(voice);
-                                  setIsVoiceMenuOpen(false);
-                                  if (activeChatId) {
-                                    updateDoc(doc(db, 'chats', activeChatId), { selectedVoice: voice });
-                                  }
-                                }, setIsVoiceMenuOpen)}
-                                initial={{ opacity: 0, y: shouldReduceMotion ? 0 : -5 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: shouldReduceMotion ? 0 : -5 }}
-                                className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-20 focus:outline-none"
-                              >
-                                {AVAILABLE_VOICES.map((voice, idx) => (
-                                  <button
-                                    key={voice}
-                                    id={`voice-option-${idx}`}
-                                    role="option"
-                                    aria-selected={selectedVoice === voice}
-                                    onClick={() => {
-                                      setSelectedVoice(voice);
-                                      setIsVoiceMenuOpen(false);
-                                      if (activeChatId) {
-                                        updateDoc(doc(db, 'chats', activeChatId), { selectedVoice: voice });
-                                      }
-                                    }}
-                                    className={cn(
-                                      "w-full flex items-center px-4 py-2.5 text-left text-sm hover:bg-slate-50 transition-colors focus-ring",
-                                      selectedVoice === voice ? "bg-indigo-50/50 text-indigo-700 font-semibold" : "text-slate-700",
-                                      focusedIndex === idx && "bg-slate-100"
-                                    )}
-                                  >
-                                    {voice}
                                   </button>
                                 ))}
                               </motion.div>
@@ -1143,25 +942,8 @@ ${draftContent}
 
         {/* Main Chat Area */}
         <main id="main-content" aria-label="Main chat area" className="flex-1 overflow-y-auto relative" tabIndex={-1}>
-          {isLive && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-sm border border-indigo-100 shadow-lg rounded-2xl p-4 max-w-md w-[90%] text-center">
-              <div className="flex items-center justify-center gap-3 mb-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
-                  <Mic size={20} className="animate-pulse" />
-                </div>
-                <h3 className="font-bold text-indigo-900">Refleksyon Live</h3>
-              </div>
-              <p 
-                className="text-sm text-slate-600 italic line-clamp-3"
-                aria-live="polite"
-                aria-atomic="true"
-              >
-                {transcript || "Listening..."}
-              </p>
-            </div>
-          )}
           <div className="mx-auto max-w-3xl w-full py-4">
-            {messages.length === 0 && !liveUserText && !liveModelText ? (
+            {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-[60vh] text-center px-6">
                 <motion.div
                   initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.9 }}
@@ -1200,7 +982,6 @@ ${draftContent}
                   <ChatMessage 
                     key={message.id} 
                     message={message} 
-                    selectedVoice={selectedVoice}
                     onUpdate={(content, status) => handleUpdateMessage(message.id, content, status)}
                     onRegenerate={() => {
                       const finalizedMessages = messages.filter(m => m.status === 'finalized');
@@ -1212,32 +993,6 @@ ${draftContent}
                     }}
                   />
                 ))}
-                
-                {/* Live Audio Draft Messages */}
-                {liveUserText && (
-                  <ChatMessage 
-                    message={{
-                      id: 'live-user',
-                      role: 'user',
-                      content: liveUserText,
-                      status: 'finalized',
-                      timestamp: Date.now()
-                    }}
-                    selectedVoice={selectedVoice}
-                  />
-                )}
-                {liveModelText && (
-                  <ChatMessage 
-                    message={{
-                      id: 'live-model',
-                      role: 'assistant',
-                      content: liveModelText,
-                      status: 'finalized',
-                      timestamp: Date.now()
-                    }}
-                    selectedVoice={selectedVoice}
-                  />
-                )}
 
                 {streamingMessage && (
                   <>
@@ -1262,7 +1017,6 @@ ${draftContent}
                         status: 'draft',
                         timestamp: Date.now()
                       }}
-                      selectedVoice={selectedVoice}
                     />
                   </>
                 )}
