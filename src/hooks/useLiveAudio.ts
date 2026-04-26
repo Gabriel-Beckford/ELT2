@@ -97,7 +97,22 @@ export function useLiveAudio(
       
       streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
       
-      mediaRecorderRef.current = new MediaRecorder(streamRef.current);
+      let selectedMimeType = '';
+      const typesToTry = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+        'audio/aac'
+      ];
+      for (const t of typesToTry) {
+        if (MediaRecorder.isTypeSupported(t)) {
+          selectedMimeType = t;
+          break;
+        }
+      }
+      
+      mediaRecorderRef.current = new MediaRecorder(streamRef.current, selectedMimeType ? { mimeType: selectedMimeType } : undefined);
       
       mediaRecorderRef.current.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -106,7 +121,8 @@ export function useLiveAudio(
       };
       
       mediaRecorderRef.current.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const typeToUse = selectedMimeType.split(';')[0] || selectedMimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: typeToUse });
         processAudio(audioBlob);
       };
       

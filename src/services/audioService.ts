@@ -35,7 +35,12 @@ export async function generateTTSAudio(text: string, config: TTSConfig = {}): Pr
 
 export async function transcribeAudio(audioBlob: Blob): Promise<{ text: string, confidence: number, fallbackMessage?: string }> {
   const formData = new FormData();
-  formData.append('audio', audioBlob, 'audio.webm');
+  let ext = 'webm';
+  if (audioBlob.type.includes('mp4')) ext = 'm4a';
+  else if (audioBlob.type.includes('ogg')) ext = 'ogg';
+  else if (audioBlob.type.includes('mpeg')) ext = 'mp3';
+  
+  formData.append('audio', audioBlob, `audio.${ext}`);
 
   const response = await fetch('/api/transcribe', {
     method: 'POST',

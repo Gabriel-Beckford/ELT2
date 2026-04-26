@@ -58,11 +58,25 @@ async function startServer() {
       if (!req.file) {
         throw new Error("No audio file provided");
       }
+      if (req.file.buffer.length < 100) {
+        // Discard extremely small (likely empty) payloads to prevent API failures
+        throw new Error("INVALID_AUDIO");
+      }
+
+      let mimeType = req.file.mimetype || 'audio/webm';
+      // Strip codec suffix like audio/webm;codecs=opus
+      mimeType = mimeType.split(';')[0].trim();
+      
+      let ext = 'webm';
+      if (mimeType.includes('mp4')) ext = 'm4a';
+      else if (mimeType.includes('mpeg')) ext = 'mp3';
+      else if (mimeType.includes('ogg')) ext = 'ogg';
+      else if (mimeType.includes('aac')) ext = 'aac';
 
       const form = new FormData();
       form.append("file", req.file.buffer, {
-        filename: `recorded_audio.${req.file.mimetype.split('/')[1] || 'webm'}`,
-        contentType: req.file.mimetype,
+        filename: `recording.${ext}`,
+        contentType: mimeType,
       });
       form.append("model_id", "scribe_v1"); // ElevenLabs STT model
 
@@ -77,8 +91,21 @@ async function startServer() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(JSON.stringify({ event: 'STT_API_ERROR', requestId, status: response.status }));
+        let parsedReason = "unknown_error";
+        try {
+          const errData = JSON.parse(errorText);
+          parsedReason = errData.detail?.status || errData.detail?.message || errData.detail || errData.message || "unknown_error";
+        } catch (e) {
+          // Fallback classification only when parsing fails
+          parsedReason = "unparseable_error_payload";
+        }
+        
+        console.error(JSON.stringify({ event: 'STT_API_ERROR', requestId, status: response.status, reason: String(parsedReason).substring(0, 100) }));
+        
         if (response.status === 429) throw new Error("RATE_LIMIT");
+        if (response.status === 400 || response.status === 422) {
+          throw new Error("INVALID_AUDIO");
+        }
         throw new Error("API_ERROR");
       }
 
@@ -107,14 +134,19 @@ async function startServer() {
         metadata: { _id: requestId } // omit raw text from logs/metadata by default
       });
     } catch (error: any) {
-      const errType = error.message === "RATE_LIMIT" ? "rate_limit" : error.message === "No audio file provided" ? "invalid_audio" : "network_failure";
+      let errType = "network_failure";
+      if (error.message === "RATE_LIMIT") errType = "rate_limit";
+      else if (error.message === "No audio file provided") errType = "invalid_input";
+      else if (error.message === "INVALID_AUDIO") errType = "invalid_audio";
+
       console.error(JSON.stringify({ event: 'STT_ERROR', requestId, error: errType, durationMs: Date.now() - startTime }));
       
       const safeMessage = errType === "rate_limit" ? "Service is currently busy. Please try again in a moment." :
-                          errType === "invalid_audio" ? "Invalid audio file detected. Please check your microphone." :
+                          errType === "invalid_input" ? "No audio file provided." :
+                          errType === "invalid_audio" ? "Audio format is invalid or clip is too short to process." :
                           "Network error occurred while processing audio. Please try again.";
       
-      res.status(errType === "invalid_audio" ? 400 : errType === "rate_limit" ? 429 : 500)
+      res.status((errType === "invalid_audio" || errType === "invalid_input") ? 400 : errType === "rate_limit" ? 429 : 500)
          .json({ error: safeMessage, errorType: errType });
     }
   });
