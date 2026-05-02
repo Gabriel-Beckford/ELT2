@@ -125,23 +125,21 @@ export class SoftRevealController {
     this.visible = this.buffer.slice(0, nextIndex);
     this.onUpdate(this.visible);
 
-    // Calculate base delay for this chunk
-    let delay = revealedText.length * this.msPerChar;
+    // Give a fixed pleasant reading delay per paragraph/sentence instead of character-count based,
+    // since we reveal large chunks at once.
+    let delay = 300; // Base delay
     
     // Apply pause multipliers based on the end of the chunk
     const lastChar = revealedText[revealedText.length - 1];
     const lastTwo = revealedText.slice(-2);
 
     if (lastTwo === '\n\n' || lastChar === '\n') {
-      delay *= this.config.pauseMultipliers.paragraph;
+      delay = 1500;
     } else if (['.', '!', '?'].includes(lastChar)) {
-      delay *= this.config.pauseMultipliers.sentence;
+      delay = 800;
     } else if ([',', ';', ':'].includes(lastChar)) {
-      delay *= this.config.pauseMultipliers.comma;
+      delay = 500;
     }
-
-    // Cap delay to ensure it doesn't feel stuck
-    delay = Math.min(delay, 1500);
 
     this.scheduleTick(delay);
   }

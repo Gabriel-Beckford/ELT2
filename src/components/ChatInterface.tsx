@@ -166,20 +166,32 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     );
   }
   
+  const isOptedOut = localStorage.getItem('dataOptOut') === 'true';
+
   // Fetch user profile
   useEffect(() => {
     if (!user) return;
+    if (isOptedOut) {
+      const localProfileStr = localStorage.getItem(`profile_${user.uid}`);
+      if (localProfileStr) {
+        setUserProfile(JSON.parse(localProfileStr));
+      } else {
+        setUserProfile(null);
+      }
+      return;
+    }
     const profileRef = doc(db, 'profiles', user.uid);
     return onSnapshot(profileRef, (snapshot) => {
       if (snapshot.exists()) {
         setUserProfile(snapshot.data() as UserProfile);
       }
     });
-  }, [user]);
+  }, [user, isOptedOut]);
 
   // Fetch user's chats
   useEffect(() => {
     if (!user) return;
+    if (isOptedOut) return; // Managed by React state
     const q = query(
       collection(db, 'chats'),
       where('userId', '==', user.uid),
@@ -189,7 +201,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       const chatList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
       setChats(chatList);
     });
-  }, [user]);
+  }, [user, isOptedOut]);
 
   // Fetch messages for active chat
   useEffect(() => {
@@ -214,6 +226,8 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       if (activeChat.ttsPitch !== undefined) setTtsPitch(activeChat.ttsPitch);
       if (activeChat.sttMode) setSttMode(activeChat.sttMode);
     }
+    if (isOptedOut) return; // Managed by React state
+    
     const q = query(
       collection(db, 'chats', activeChatId, 'messages'),
       orderBy('timestamp', 'asc')
@@ -222,7 +236,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       const msgList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
       setMessages(msgList);
     });
-  }, [activeChatId]);
+  }, [activeChatId, chats, isOptedOut]);
 
   // Cleanup reveal controller
   useEffect(() => {
@@ -261,6 +275,58 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     scrollToBottom();
   }, [messages]);
 
+  const safeAddChat = async (data: any) => {
+    if (isOptedOut) {
+      const id = `local_${Date.now()}`;
+      const newChat = { id, ...data };
+      setChats(prev => [newChat, ...prev]);
+      return { id };
+    }
+    return addDoc(collection(db, 'chats'), data);
+  };
+
+  const safeAddMessage = async (chatId: string, data: any) => {
+    if (isOptedOut) {
+      const id = `local_${Date.now()}`;
+      const newMsg = { id, ...data };
+      setMessages(prev => [...prev, newMsg]);
+      return { id };
+    }
+    return addDoc(collection(db, 'chats', chatId, 'messages'), data);
+  };
+
+  const safeUpdateChat = async (chatId: string, data: any) => {
+    if (isOptedOut) {
+      setChats(prev => prev.map(c => c.id === chatId ? { ...c, ...data } : c));
+      return;
+    }
+    return updateDoc(doc(db, 'chats', chatId), data);
+  };
+
+  const safeUpdateMessage = async (chatId: string, msgId: string, data: any) => {
+    if (isOptedOut) {
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, ...data } : m));
+      return;
+    }
+    return updateDoc(doc(db, 'chats', chatId, 'messages', msgId), data);
+  };
+
+  const safeDeleteChat = async (chatId: string) => {
+    if (isOptedOut) {
+      setChats(prev => prev.filter(c => c.id !== chatId));
+      if (activeChatId === chatId) {
+        setActiveChatId(null);
+        setMessages([]);
+      }
+      return;
+    }
+    const msgs = await getDocs(collection(db, 'chats', chatId, 'messages'));
+    for (const d of msgs.docs) {
+      await deleteDoc(d.ref);
+    }
+    await deleteDoc(doc(db, 'chats', chatId));
+  };
+
   const createNewChat = async (title: string) => {
     if (!user) return null;
     const chatData = {
@@ -280,7 +346,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    const docRef = await addDoc(collection(db, 'chats'), chatData);
+    const docRef = await safeAddChat(chatData);
     setActiveChatId(docRef.id);
     return docRef.id;
   };
@@ -307,10 +373,10 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
     if (imageUrl) {
       userMsgData.imageUrl = imageUrl;
     }
-    await addDoc(collection(db, 'chats', chatId, 'messages'), userMsgData);
+    await safeAddMessage(chatId, userMsgData);
     
     // Update chat timestamp
-    await updateDoc(doc(db, 'chats', chatId), { updatedAt: Date.now() });
+    await safeUpdateChat(chatId, { updatedAt: Date.now() });
 
     // Trigger AI response in background
     const finalizedMessages = messages.filter(m => m.status === 'finalized');
@@ -362,8 +428,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
 
   const handleUpdateMessage = async (msgId: string, content: string, status: 'draft' | 'finalized') => {
     if (!activeChatId) return;
-    const msgRef = doc(db, 'chats', activeChatId, 'messages', msgId);
-    await updateDoc(msgRef, { content, status });
+    await safeUpdateMessage(activeChatId, msgId, { content, status });
   };
 
   const parseReviewerOutput = (text: string) => {
@@ -582,10 +647,10 @@ ${draftContent}
       if (draftThoughts) modelMsgData.draftThoughts = draftThoughts;
       if (revisedThoughts) modelMsgData.reviewThoughts = revisedThoughts;
 
-      await addDoc(collection(db, 'chats', chatId, 'messages'), modelMsgData);
+      await safeAddMessage(chatId, modelMsgData);
     } catch (error) {
       const errMsg = `Error generating response: ${error instanceof Error ? error.message : String(error)}`;
-      await addDoc(collection(db, 'chats', chatId, 'messages'), {
+      await safeAddMessage(chatId, {
         chatId,
         role: 'assistant',
         content: errMsg,
@@ -603,11 +668,7 @@ ${draftContent}
   const deleteChat = async (chatIdToDelete: string) => {
     if (!user) return;
     try {
-      const msgs = await getDocs(collection(db, 'chats', chatIdToDelete, 'messages'));
-      for (const d of msgs.docs) {
-        await deleteDoc(d.ref);
-      }
-      await deleteDoc(doc(db, 'chats', chatIdToDelete));
+      await safeDeleteChat(chatIdToDelete);
       if (activeChatId === chatIdToDelete) {
         setActiveChatId(null);
       }
@@ -735,7 +796,7 @@ ${draftContent}
                 setAutoReadResponses(newVal);
                 if (newVal) stopSpeaking();
                 if (activeChatId) {
-                  updateDoc(doc(db, 'chats', activeChatId), { autoReadResponses: newVal });
+                  safeUpdateChat(activeChatId, { autoReadResponses: newVal });
                 }
               }}
               className={cn(
@@ -834,7 +895,7 @@ ${draftContent}
                           const newPromptId = e.target.value as PromptId;
                           setSelectedPromptId(newPromptId);
                           if (activeChatId) {
-                            updateDoc(doc(db, 'chats', activeChatId), { selectedPromptId: newPromptId });
+                            safeUpdateChat(activeChatId, { selectedPromptId: newPromptId });
                           }
                         }}
                         className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors shadow-sm font-medium focus-ring"
@@ -878,7 +939,7 @@ ${draftContent}
                                   setSelectedModel(model.id);
                                   setIsModelMenuOpen(false);
                                   if (activeChatId) {
-                                    updateDoc(doc(db, 'chats', activeChatId), { selectedModel: model.id });
+                                    safeUpdateChat(activeChatId, { selectedModel: model.id });
                                   }
                                 }, setIsModelMenuOpen)}
                                 initial={{ opacity: 0, y: shouldReduceMotion ? 0 : -5 }}
@@ -896,7 +957,7 @@ ${draftContent}
                                       setSelectedModel(model.id);
                                       setIsModelMenuOpen(false);
                                       if (activeChatId) {
-                                        updateDoc(doc(db, 'chats', activeChatId), { selectedModel: model.id });
+                                        safeUpdateChat(activeChatId, { selectedModel: model.id });
                                       }
                                     }}
                                     className={cn(
@@ -950,7 +1011,7 @@ ${draftContent}
                                   setSelectedTheme(themeName);
                                   setIsThemeMenuOpen(false);
                                   if (activeChatId) {
-                                    updateDoc(doc(db, 'chats', activeChatId), { selectedTheme: themeName });
+                                    safeUpdateChat(activeChatId, { selectedTheme: themeName });
                                   }
                                 }, setIsThemeMenuOpen)}
                                 initial={{ opacity: 0, y: shouldReduceMotion ? 0 : -5 }}
@@ -968,7 +1029,7 @@ ${draftContent}
                                       setSelectedTheme(themeName);
                                       setIsThemeMenuOpen(false);
                                       if (activeChatId) {
-                                        updateDoc(doc(db, 'chats', activeChatId), { selectedTheme: themeName });
+                                        safeUpdateChat(activeChatId, { selectedTheme: themeName });
                                       }
                                     }}
                                     className={cn(
@@ -999,7 +1060,7 @@ ${draftContent}
                             onChange={(e) => {
                               setUseGrounding(e.target.checked);
                               if (activeChatId) {
-                                updateDoc(doc(db, 'chats', activeChatId), { useGrounding: e.target.checked });
+                                safeUpdateChat(activeChatId, { useGrounding: e.target.checked });
                               }
                             }}
                             className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer focus-ring"
@@ -1034,7 +1095,7 @@ ${draftContent}
                               const val = parseInt(e.target.value);
                               setSliderValue(val);
                               if (activeChatId) {
-                                updateDoc(doc(db, 'chats', activeChatId), { sliderValue: val });
+                                safeUpdateChat(activeChatId, { sliderValue: val });
                               }
                             }}
                             className="w-full h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus-ring"
@@ -1066,7 +1127,7 @@ ${draftContent}
                               const val = e.target.value as 'browser' | 'server';
                               setSttMode(val);
                               if (activeChatId) {
-                                updateDoc(doc(db, 'chats', activeChatId), { sttMode: val });
+                                safeUpdateChat(activeChatId, { sttMode: val });
                               }
                             }}
                             className="text-sm bg-slate-50 border border-slate-300 rounded-md px-2 py-1 focus-ring"
@@ -1085,7 +1146,7 @@ ${draftContent}
                               onChange={(e) => {
                                 setTtsVoiceName(e.target.value);
                                 if (activeChatId) {
-                                  updateDoc(doc(db, 'chats', activeChatId), { ttsVoiceName: e.target.value });
+                                  safeUpdateChat(activeChatId, { ttsVoiceName: e.target.value });
                                 }
                               }}
                               className="text-sm bg-slate-50 border border-slate-300 rounded-md px-2 py-1 focus-ring"
@@ -1114,7 +1175,7 @@ ${draftContent}
                               const val = parseFloat(e.target.value);
                               setTtsRate(val);
                               if (activeChatId) {
-                                updateDoc(doc(db, 'chats', activeChatId), { ttsRate: val });
+                                safeUpdateChat(activeChatId, { ttsRate: val });
                               }
                             }}
                             className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus-ring"
@@ -1135,7 +1196,7 @@ ${draftContent}
                               const val = parseFloat(e.target.value);
                               setTtsPitch(val);
                               if (activeChatId) {
-                                updateDoc(doc(db, 'chats', activeChatId), { ttsPitch: val });
+                                safeUpdateChat(activeChatId, { ttsPitch: val });
                               }
                             }}
                             className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus-ring"

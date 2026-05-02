@@ -10,6 +10,7 @@ import { ChatInterface } from './components/ChatInterface';
 import { AuthScreen } from './components/AuthScreen';
 import { ZenPond } from './components/ZenPond';
 import LearningJourney from './components/LearningJourney';
+import { DataOptOutModal } from './components/DataOptOutModal';
 import { PromptId } from './constants/prompts';
 import { Loader2 } from 'lucide-react';
 
@@ -17,6 +18,7 @@ export default function App() {
   const [user, loading, error] = useAuthState(auth);
   const [hasCompletedIntro, setHasCompletedIntro] = useState(false);
   const [hasViewedJourney, setHasViewedJourney] = useState(false);
+  const [hasCompletedDataConsent, setHasCompletedDataConsent] = useState(false);
   const [selectedPathway, setSelectedPathway] = useState<PromptId | null>(null);
 
   if (loading) {
@@ -37,6 +39,14 @@ export default function App() {
   }
 
   if (user) {
+    if (!hasCompletedDataConsent) {
+      return (
+        <div className="h-screen w-full bg-slate-50 flex items-center justify-center">
+          <DataOptOutModal onComplete={() => setHasCompletedDataConsent(true)} />
+        </div>
+      );
+    }
+
     if (!hasCompletedIntro) {
       return (
         <>

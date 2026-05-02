@@ -46,14 +46,24 @@ export const MemorySettings: React.FC = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user) return;
+      const isOptedOut = localStorage.getItem('dataOptOut') === 'true';
       try {
-        const docRef = doc(db, 'profiles', user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setProfile(docSnap.data() as UserProfile);
+        if (isOptedOut) {
+          const localProfileStr = localStorage.getItem(`profile_${user.uid}`);
+          if (localProfileStr) {
+            setProfile(JSON.parse(localProfileStr));
+          } else {
+            setProfile(prev => ({ ...prev, name: user.displayName || '' }));
+          }
         } else {
-          // Initialize with user display name if available
-          setProfile(prev => ({ ...prev, name: user.displayName || '' }));
+          const docRef = doc(db, 'profiles', user.uid);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setProfile(docSnap.data() as UserProfile);
+          } else {
+            // Initialize with user display name if available
+            setProfile(prev => ({ ...prev, name: user.displayName || '' }));
+          }
         }
       } catch (error) {
         console.error("Error fetching profile:", error);
@@ -69,12 +79,17 @@ export const MemorySettings: React.FC = () => {
     if (!validate()) return;
     setIsSaving(true);
     setSaveSuccess(false);
+    const isOptedOut = localStorage.getItem('dataOptOut') === 'true';
     try {
       const updatedProfile = {
         ...profile,
         lastUpdatedAt: Date.now()
       };
-      await setDoc(doc(db, 'profiles', user.uid), updatedProfile);
+      if (isOptedOut) {
+        localStorage.setItem(`profile_${user.uid}`, JSON.stringify(updatedProfile));
+      } else {
+        await setDoc(doc(db, 'profiles', user.uid), updatedProfile);
+      }
       setProfile(updatedProfile);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -92,8 +107,13 @@ export const MemorySettings: React.FC = () => {
   const confirmDelete = async () => {
     if (!user) return;
     setIsDeleting(true);
+    const isOptedOut = localStorage.getItem('dataOptOut') === 'true';
     try {
-      await deleteDoc(doc(db, 'profiles', user.uid));
+      if (isOptedOut) {
+        localStorage.removeItem(`profile_${user.uid}`);
+      } else {
+        await deleteDoc(doc(db, 'profiles', user.uid));
+      }
       setProfile({
         name: user.displayName || '',
         age: '',
