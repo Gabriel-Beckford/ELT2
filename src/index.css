@@ -69,4 +69,14 @@
   .focus-ring {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 transition-shadow;
   }
+
+  /* Fade in animation for sequential paragraphs */
+  .fade-in-paragraphs > * {
+    animation: pFadeIn 1s ease-out forwards;
+  }
+  
+  @keyframes pFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 }

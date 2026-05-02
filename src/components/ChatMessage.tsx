@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import { User, Bot, Loader2, Edit2, Check, X, RotateCcw, ChevronDown, ChevronRight, ExternalLink, Globe, Cpu, Sparkles } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { Message } from '@/src/types';
+import { KolbDiagram } from './KolbDiagram';
 
 interface ChatMessageProps {
   message: Message;
@@ -193,7 +194,21 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdate, onR
                 )}
               </div>
             )}
-            <ReactMarkdown>{message.content}</ReactMarkdown>
+            {(() => {
+              if (!message.content) return null;
+              const parts = message.content.split(/(\[WIDGET:Kolb:(?:cycle|groups|styles)\])/);
+              return parts.map((part, index) => {
+                const match = part.match(/\[WIDGET:Kolb:(cycle|groups|styles)\]/);
+                if (match) {
+                  return <KolbDiagram key={index} initialView={match[1] as any} />;
+                }
+                return (
+                  <div key={index} className={message.id === 'streaming-model' ? "fade-in-paragraphs" : ""}>
+                    <ReactMarkdown>{part}</ReactMarkdown>
+                  </div>
+                );
+              });
+            })()}
             
             {message.sources && message.sources.length > 0 && (
               <div className="mt-4 pt-4 border-t border-slate-100">

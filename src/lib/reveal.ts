@@ -81,49 +81,29 @@ export class SoftRevealController {
       return;
     }
 
-    // Determine how many characters to reveal (phrase/word chunking)
-    let nextIndex = this.visible.length + 1;
-    const maxChunk = 24; // Slightly larger max chunk for word-based reveal
-    const searchLimit = Math.min(this.visible.length + maxChunk, this.buffer.length);
-    
-    // 1. Find the next safe boundary (word, punctuation, or line break)
+    // 1. Find the next safe boundary (newline or end of buffer)
+    let nextIndex = this.visible.length;
     let foundBoundary = false;
-    for (let i = nextIndex; i <= searchLimit; i++) {
-      const char = this.buffer[i];
-      const prevChar = this.buffer[i-1];
-      
-      // Safe boundaries:
-      // - Space
-      // - Punctuation followed by space or newline
-      // - Newline
-      if (
-        char === ' ' || 
-        char === '\n' || 
-        i === this.buffer.length ||
-        (['.', '!', '?', ',', ';', ':'].includes(prevChar) && (char === ' ' || char === '\n'))
-      ) {
-        nextIndex = i;
-        foundBoundary = true;
-        break;
+
+    // Find the next newline character
+    const nextNewline = this.buffer.indexOf('\n', nextIndex);
+    
+    if (nextNewline !== -1) {
+      // Find the end of this newline group to include the full break
+      let endOfNewlines = nextNewline;
+      while (endOfNewlines < this.buffer.length && this.buffer[endOfNewlines] === '\n') {
+        endOfNewlines++;
       }
+      nextIndex = endOfNewlines;
+      foundBoundary = true;
+    } else if (this.isFinished) {
+      nextIndex = this.buffer.length;
+      foundBoundary = true;
     }
 
-    // Fallback: if no boundary found in maxChunk, reveal by word chunks if possible
     if (!foundBoundary) {
-      const nextSpace = this.buffer.indexOf(' ', nextIndex);
-      if (nextSpace !== -1 && nextSpace < this.buffer.length) {
-        nextIndex = nextSpace + 1;
-      } else {
-        // If no space at all, just take the whole remaining buffer if it's small, 
-        // or wait for more data if not finished
-        if (this.isFinished) {
-          nextIndex = this.buffer.length;
-        } else {
-          // Wait for more data to find a boundary
-          this.scheduleTick(100);
-          return;
-        }
-      }
+      this.scheduleTick(100);
+      return;
     }
 
     // 2. Guardrails for Markdown constructs (Syntactic Stability)

@@ -67,7 +67,7 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
   const [ttsVoiceName, setTtsVoiceName] = useState('21m00Tcm4TlvDq8ikWAM'); // Default to Rachel if Cloud
   const [ttsRate, setTtsRate] = useState(1);
   const [ttsPitch, setTtsPitch] = useState(1);
-  const [sttMode, setSttMode] = useState<'browser' | 'server'>('browser');
+  const [sttMode, setSttMode] = useState<'browser' | 'server'>('server');
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -202,7 +202,10 @@ export const ChatInterface: React.FC<{ initialPromptId?: PromptId }> = ({ initia
       if (activeChat.sliderValue) setSliderValue(activeChat.sliderValue);
       if (activeChat.selectedPromptId) setSelectedPromptId(activeChat.selectedPromptId as PromptId);
       if (activeChat.useGrounding !== undefined) setUseGrounding(activeChat.useGrounding);
-      if (activeChat.selectedModel) setSelectedModel(activeChat.selectedModel);
+      if (activeChat.selectedModel) {
+        const isValid = AVAILABLE_MODELS.some(m => m.id === activeChat.selectedModel);
+        setSelectedModel(isValid ? activeChat.selectedModel : 'gemini-3-flash-preview');
+      }
       if (activeChat.selectedTheme) setSelectedTheme(activeChat.selectedTheme);
       if (activeChat.voiceEnabled !== undefined) setVoiceEnabled(activeChat.voiceEnabled);
       if (activeChat.autoReadResponses !== undefined) setAutoReadResponses(activeChat.autoReadResponses);
