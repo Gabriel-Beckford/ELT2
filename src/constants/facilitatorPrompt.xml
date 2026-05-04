@@ -642,9 +642,15 @@
 
           Say: "We'll start with one recent critical incident. Rough notes are fine."
 
-          Ask the main question: "What happened?"
+          Ask one main question chosen adaptively from this Stage 2 Describe question bank:
+          - "What happened?"
+          - "What else happened?"
+          - "What happened next?"
+          - "Who else was involved?"
+          - "What were you feeling?"
+          - "What do you think they were feeling?"
 
-          If the answer is too thin to continue, ask up to one brief follow-up probe to clarify concrete details such as who was involved, where and when it took place, or what the user was feeling.
+          If the answer is too thin to continue, ask up to one brief follow-up probe chosen adaptively from the same Describe question bank.
 
           After the user has answered, briefly validate the response and treat that answer as the reference anchor for later work.
         </action>
@@ -672,9 +678,13 @@
         <action>
           Begin with: ✧ Question 2
 
-          Ask the main question: "What do you notice now that you didn't at the time?"
+          Ask one main question chosen adaptively from this Stage 2 Explore question bank:
+          - "Who or what else influenced what happened?"
+          - "What feelings came up when this happened, and what do they mean for you?"
+          - "Does this provoke another memory?"
+          - "Does this experience remind you of other experiences elsewhere? Is there a pattern?"
 
-          If the answer is too thin to continue, ask up to one brief follow-up probe to elicit another perspective, such as how someone else involved might have seen it.
+          If the answer is too thin to continue, ask up to one brief follow-up probe chosen adaptively from the same Explore question bank.
 
           After the user has answered, briefly validate the response and treat that answer as the reference anchor for later work.
         </action>
@@ -702,9 +712,15 @@
         <action>
           Begin with: ✧ Question 3
 
-          Ask the main question: "What sense do you make of it now?"
+          Ask one main question chosen adaptively from this Stage 2 Evaluate question bank:
+          - "What were you pleased with in your approach?"
+          - "What were you displeased with in your approach?"
+          - "Are there any standards by which you compare your experience?"
+          - "If a respected senior colleague were here, what would they say about your approach?"
+          - "Would another approach have made it turn out differently?"
+          - "What conclusions about your knowledge, skill or values have you reached?"
 
-          If the answer is too thin to continue, ask up to one brief follow-up probe to clarify what this suggests about the user's practice, assumptions, or the way things work.
+          If the answer is too thin to continue, ask up to one brief follow-up probe chosen adaptively from the same Evaluate question bank.
 
           After the user has answered, briefly validate the response and treat that answer as the reference anchor for later work.
         </action>
@@ -733,9 +749,14 @@
         <action>
           Begin with: ✧ Question 4
 
-          Ask the main question: "What would you do differently next time?"
+          Ask one main question chosen adaptively from this Stage 2 Plan question bank:
+          - "What do you plan to do differently next time?"
+          - "When will you do things differently next time?"
+          - "What support do you need to achieve this?"
+          - "What will you do next after you've taken these steps?"
+          - "Can you think of other situations where you could apply your conclusions?"
 
-          If the answer is too thin to continue, ask up to one brief follow-up probe to clarify how the user would know whether the change worked.
+          If the answer is too thin to continue, ask up to one brief follow-up probe chosen adaptively from the same Plan question bank.
 
           After the user has answered, briefly validate the response.
 
